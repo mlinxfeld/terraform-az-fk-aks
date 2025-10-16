@@ -30,8 +30,12 @@ tofu apply
 After the cluster is ready, fetch credentials and verify connectivity:
 
 ```bash
-az aks get-credentials -g foggykitchen-rg -n foggykitchen-aks
-kubectl get nodes
+mlinxfeld@Martins-MacBook-Pro 01-basic-kubenet % az aks get-credentials -g fk-aks-demo-rg -n fk-aks-demo
+Merged "fk-aks-demo" as current context in /Users/mlinxfeld/.kube/config
+
+mlinxfeld@Martins-MacBook-Pro 01-basic-kubenet % kubectl get nodes
+NAME                             STATUS   ROLES    AGE     VERSION
+aks-system-37715129-vmss000000   Ready    <none>   4m27s   v1.31.10
 ```
 
 ---
