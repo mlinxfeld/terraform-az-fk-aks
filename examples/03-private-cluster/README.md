@@ -34,7 +34,7 @@ Terraform will provision the cluster successfully, but note:
 If you have a Bastion or VM in that network:
 
 ```bash
-az aks get-credentials -g foggykitchen-rg -n foggykitchen-aks
+az aks get-credentials -g fk-aks-demo-rg -n fk-aks-private
 kubectl get nodes
 ```
 
