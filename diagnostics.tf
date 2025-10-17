@@ -16,12 +16,16 @@ locals {
 }
 
 resource "azurerm_kubernetes_cluster_extension" "ama" {
-  count                = local.law_id == null ? 0 : 1
-  name                 = "azuremonitor-containers"
-  cluster_id           = azurerm_kubernetes_cluster.this.id
-  extension_type       = "microsoft.azuremonitor.containers"
-  release_train        = "Stable"
+  count           = (var.monitoring_mode == "ama" && local.law_id != null) ? 1 : 0
+  name            = "azuremonitor-containers"
+  cluster_id      = azurerm_kubernetes_cluster.this.id
+  extension_type  = "microsoft.azuremonitor.containers"
+  release_train   = "Stable"
   configuration_settings = {
     logAnalyticsWorkspaceResourceID = local.law_id
   }
+  depends_on = [
+    azurerm_kubernetes_cluster.this,
+    time_sleep.wait_role
+  ]
 }

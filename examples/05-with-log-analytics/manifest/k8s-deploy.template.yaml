@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fk-acr-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fk-acr-demo
+  template:
+    metadata:
+      labels:
+        app: fk-acr-demo
+    spec:
+      containers:
+      - name: web
+        image: ${acr_login_server}/hello:1.0 
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fk-acr-demo-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: fk-acr-demo
+  ports:
+  - port: 80
+    targetPort: 80

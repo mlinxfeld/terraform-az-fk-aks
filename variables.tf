@@ -143,6 +143,16 @@ variable "law_retention_days" {
     default = 30 
 }
 
+variable "monitoring_mode" { 
+    type = string 
+    default = "oms" # "oms" | "ama"
+}  
+
+variable "assign_contributor_on_cluster" { 
+    type = bool 
+    default = false # only for AMA, when no privs
+} 
+
 # Security / Auth
 variable "rbac_enabled" { 
     type = bool    

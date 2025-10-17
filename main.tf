@@ -36,6 +36,13 @@ resource "azurerm_kubernetes_cluster" "this" {
     dns_service_ip    = var.dns_service_ip
   }
 
+  dynamic "oms_agent" {
+   for_each = (var.monitoring_mode == "oms" && local.law_id != null) ? [1] : []
+   content {
+     log_analytics_workspace_id = local.law_id
+   }
+  }  
+
   private_cluster_enabled = var.private_cluster_enabled
   private_dns_zone_id     = var.private_dns_zone_id
   azure_policy_enabled    = false
@@ -58,4 +65,23 @@ resource "azurerm_role_assignment" "acr_pull" {
   role_definition_id   = data.azurerm_role_definition.acrpull[0].role_definition_id
   principal_id         = azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
   depends_on           = [azurerm_kubernetes_cluster.this]
+}
+
+data "azurerm_client_config" "current" {}
+
+data "azurerm_role_definition" "contributor" {
+  name = "Contributor"
+}
+
+resource "azurerm_role_assignment" "aks_contributor" {
+  count             = var.assign_contributor_on_cluster ? 1 : 0
+  scope             = azurerm_kubernetes_cluster.this.id
+  role_definition_id= data.azurerm_role_definition.contributor.role_definition_id
+  principal_id      = data.azurerm_client_config.current.object_id
+}
+
+resource "time_sleep" "wait_role" {
+  count           = var.assign_contributor_on_cluster ? 1 : 0
+  depends_on      = [azurerm_role_assignment.aks_contributor]
+  create_duration = "20s"
 }
