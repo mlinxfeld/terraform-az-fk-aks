@@ -16,6 +16,8 @@ resource "azurerm_subnet" "aks" {
 }
 
 locals {
-  effective_subnet_id = coalesce(var.subnet_id, try(azurerm_subnet.aks[0].id, null))
-  effective_vnet_id   = coalesce(var.vnet_id,   try(azurerm_virtual_network.vnet[0].id, null))
+  effective_subnet_id   = coalesce(var.subnet_id, try(azurerm_subnet.aks[0].id, null))
+  effective_vnet_id     = coalesce(var.vnet_id,   try(azurerm_virtual_network.vnet[0].id, null))
+  effective_subnet_name = coalesce(var.subnet_id, try(azurerm_subnet.aks[0].name, null))
+  effective_vnet_name   = coalesce(var.vnet_id,   try(azurerm_virtual_network.vnet[0].name, null))
 }
