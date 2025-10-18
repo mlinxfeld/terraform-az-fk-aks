@@ -14,7 +14,6 @@ In this exercise, you will:
 - Configure a **User Pool** with autoscaling enabled.
 - Deploy a CPU-intensive workload that triggers scale-up.
 - Observe AKS dynamically adding new nodes.
-- Optionally deploy an **Horizontal Pod Autoscaler (HPA)**.
 
 ---
 
@@ -137,7 +136,6 @@ az aks nodepool show -g fk-aks-demo-rg --cluster-name fk-aks-autoscale -n userpo
 
 - **Scale from zero** requires the scheduler to match pods with the node pool template (labels, taints, selectors).
 - **Cluster Autoscaler** reacts to Pending pods; provisioning may take several minutes.
-- **Horizontal Pod Autoscaler (HPA)** operates independently and adjusts pod replicas within a deployment.
 
 ---
 
@@ -146,7 +144,6 @@ az aks nodepool show -g fk-aks-demo-rg --cluster-name fk-aks-autoscale -n userpo
 To remove resources:
 ```bash
 kubectl delete -f manifests/heavy-deploy.yaml --ignore-not-found
-kubectl delete -f manifests/hpa-optional.yaml --ignore-not-found
 
 tofu destroy
 ```
