@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heavy-deploy
+spec:
+  replicas: 25
+  selector:
+    matchLabels:
+      app: heavy
+  template:
+    metadata:
+      labels:
+        app: heavy
+    spec:
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "user"
+        effect: "NoSchedule"
+      nodeSelector:
+        workload: "apps"
+      containers:
+      - name: cpu-burn
+        image: nginx:stable
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        ports:
+        - containerPort: 80
