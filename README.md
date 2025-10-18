@@ -28,7 +28,13 @@ terraform-az-fk-aks/
 │   ├── 07-autoscaling/
 │   ├── 08-persistent-storage/
 │   └── README.md
-(...)
+├── node_pools.tf
+├── locals.tf
+├── outputs.tf
+├── network.tf
+├── variables.tf
+├── main.tf
+├── diagnostics.tf
 ├── LICENSE
 └── README.md
 ```
