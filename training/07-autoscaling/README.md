@@ -67,6 +67,11 @@ spec:
       labels:
         app: heavy
     spec:
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "user"
+        effect: "NoSchedule"
       nodeSelector:
         workload: "apps"
       containers:
