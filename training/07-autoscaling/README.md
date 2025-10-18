@@ -90,7 +90,7 @@ spec:
 
 Deploy it using:
 ```bash
-kubectl apply -f manifests/heavy-deploy.yaml
+kubectl apply -f generated/heavy-deploy.yaml
 kubectl get pods -l app=heavy -o wide
 ```
 
@@ -148,7 +148,7 @@ az aks nodepool show -g fk-aks-demo-rg --cluster-name fk-aks-autoscale -n userpo
 
 To remove resources:
 ```bash
-kubectl delete -f manifests/heavy-deploy.yaml --ignore-not-found
+kubectl delete -f generated/heavy-deploy.yaml --ignore-not-found
 
 tofu destroy
 ```
