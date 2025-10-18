@@ -1,5 +1,5 @@
 module "aks" {
-  source              = "../../"
+  source              = "github.com/mlinxfeld/terraform-az-fk-aks"
   name                = "fk-aks-demo"
   create_rg           = false
   location            = azurerm_resource_group.foggykitchen_rg.location

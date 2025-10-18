@@ -41,7 +41,7 @@ All examples from the FoggyKitchen AKS course are located under the [`training/`
 
 ```hcl
 module "aks" {
-  source              = "../.."  # path to the module
+  source              = "github.com/mlinxfeld/terraform-az-fk-aks"
   name                = "fk-aks-demo"
   location            = "westeurope"
   create_rg           = true
