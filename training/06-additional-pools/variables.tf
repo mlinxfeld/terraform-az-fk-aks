@@ -14,16 +14,16 @@ variable "additional_node_pools" {
     {
       name                 = "userpool"
       vm_size              = "Standard_D2s_v3"
-      node_count           = 0  # Autoscaller                
+      node_count           = 2         
       mode                 = "User"
       orchestrator_version = null
       subnet_id            = null                  
       taints               = ["dedicated=user:NoSchedule"]
       labels               = { workload = "apps", sku = "general" }
       max_pods             = 30
-      enable_auto_scaling  = true
-      min_count            = 1
-      max_count            = 3
+      enable_auto_scaling  = false
+      min_count            = null
+      max_count            = null
       spot                 = false
     }
   ]
