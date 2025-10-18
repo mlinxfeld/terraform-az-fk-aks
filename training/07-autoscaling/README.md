@@ -2,7 +2,7 @@
 
 In this lesson, you will learn how to enable and test **Cluster Autoscaler** in Azure Kubernetes Service (AKS). The autoscaler dynamically adjusts the number of nodes in your node pool based on the resource requirements of your running pods.
 
-This lesson builds directly on top of the module from Lesson 06 (Additional Node Pools) and focuses on scaling behavior under load.
+This lesson builds directly on top of the module from [Lesson 06](../06-additional-pools) and focuses on scaling behavior under load.
 
 ---
 
