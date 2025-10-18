@@ -1,4 +1,4 @@
-# Module 06 – Additional Node Pools in Azure Kubernetes Service (AKS)
+# Lesson 06 – Additional Node Pools in Azure Kubernetes Service (AKS)
 
 In this lesson, we extend the AKS cluster by adding **additional node pools**.  
 Each pool can have its own VM size, scaling policy, and labels for targeted workloads.  
