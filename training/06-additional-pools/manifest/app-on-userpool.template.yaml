@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-on-userpool
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: demo }
+  template:
+    metadata:
+      labels: { app: demo }
+    spec:
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "user"
+          effect: "NoSchedule"
+      nodeSelector:
+        workload: "apps"
+      containers:
+        - name: web
+          image: nginx:stable
+          ports: [{ containerPort: 80 }]
