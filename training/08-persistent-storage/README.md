@@ -66,7 +66,7 @@ spec:
 
 Run the following commands to deploy and verify:
 ```bash
-kubectl apply -f manifests/disk-demo.yaml
+kubectl apply -f generated/disk-demo.yaml
 kubectl get pvc,pv
 kubectl get pods -o wide
 ```
@@ -130,7 +130,7 @@ spec:
 
 Deploy and check resources:
 ```bash
-kubectl apply -f manifests/file-demo.yaml
+kubectl apply -f generated/file-demo.yaml
 kubectl get pvc,pv
 kubectl get pods -o wide
 ```
@@ -183,8 +183,8 @@ In Azure Portal, verify that AKS created the following:
 
 Remove resources when done:
 ```bash
-kubectl delete -f manifests/disk-demo.yaml
-kubectl delete -f manifests/file-demo.yaml
+kubectl delete -f generated/disk-demo.yaml
+kubectl delete -f generated/file-demo.yaml
 ```
 This will also delete the dynamically provisioned Disks and File Shares.
 
