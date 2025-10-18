@@ -1,4 +1,4 @@
-# Terraform-AZ-FK-AKS
+# terraform-az-fk-aks
 
 This repository contains a reusable Terraform module and complete training examples for deploying **Azure Kubernetes Service (AKS)** clusters with **Terraform/OpenTofu**.  
 It’s part of the [FoggyKitchen.com](https://foggykitchen.com) training series:  
