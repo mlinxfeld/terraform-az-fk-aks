@@ -80,6 +80,11 @@ variable "private_dns_zone_id" {
     default = null  # for private cluster
 }     
 
+variable "outbound_type" {
+    type = string  
+    default = "loadBalancer"  # for private cluster
+}
+
 # Node pool (default)
 variable "default_node_count" { 
     type = number  

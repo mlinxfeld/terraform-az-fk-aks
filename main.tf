@@ -34,6 +34,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     load_balancer_sku = "standard"
     service_cidr      = var.service_cidr
     dns_service_ip    = var.dns_service_ip
+    outbound_type     = var.outbound_type # "loadBalancer" | "userDefinedRouting" 
   }
 
   dynamic "oms_agent" {
