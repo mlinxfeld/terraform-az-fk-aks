@@ -2,7 +2,7 @@
 
 This repository contains a reusable Terraform module and complete training examples for deploying **Azure Kubernetes Service (AKS)** clusters with **Terraform/OpenTofu**.  
 It’s part of the [FoggyKitchen.com](https://foggykitchen.com) training series:  
-🧩 *Azure Kubernetes Service (AKS) with Terraform/OpenTofu – Hands-On Fundamentals (2025 Edition).*
+🧩 [Azure Kubernetes Service (AKS) with Terraform/OpenTofu – Hands-On Fundamentals (2025 Edition).](https://foggykitchen.com/aks-terraform-course/)
 
 The module automates:
 - AKS cluster provisioning (System & User node pools)  
