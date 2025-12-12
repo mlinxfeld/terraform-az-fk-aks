@@ -1,6 +1,6 @@
 # AKS with Terraform/OpenTofu – Training Modules
 
-This directory contains all examples used in the **Azure Kubernetes Service (AKS) with Terraform/OpenTofu – Hands-On Fundamentals (2025 Edition)** course on [FoggyKitchen.com](https://foggykitchen.com).
+This directory contains all examples used in the [Azure Kubernetes Service (AKS) with Terraform/OpenTofu – Hands-On Fundamentals (2025 Edition) course](https://foggykitchen.com/aks-terraform-course/) on [FoggyKitchen.com](https://foggykitchen.com).
 
 Each lesson builds upon the previous one — from the simplest Kubenet cluster to observability, autoscaling, and persistent storage.
 
