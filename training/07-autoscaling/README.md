@@ -4,6 +4,9 @@ In this lesson, you will learn how to enable and test **Cluster Autoscaler** in 
 
 This lesson builds directly on top of the module from [Lesson 06](../06-additional-pools) and focuses on scaling behavior under load.
 
+📘 Related blog post:
+[AKS Autoscaling Node Pools with Terraform/OpenTofu — Turning Static Clusters into Elastic Infrastructure](https://foggykitchen.com/2025/12/07/aks-autoscaler-terraform/)
+
 ---
 
 ## 🚀 Overview

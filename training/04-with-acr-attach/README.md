@@ -2,6 +2,9 @@
 
 This example demonstrates how to build a container image in **Azure Container Registry (ACR)** and deploy it to an **Azure Kubernetes Service (AKS)** cluster using Terraform/OpenTofu. The workload is exposed publicly via a **LoadBalancer** service type.
 
+📘 Related blog post:
+[Deploying Container Images to AKS Using Azure Container Registry: Why It Matters](https://foggykitchen.com/2025/11/21/azure-container-registry-terraform/)
+
 ---
 
 ## 🧱 Architecture Overview

@@ -3,6 +3,9 @@
 In this example, we extend our Azure Kubernetes Service (AKS) deployment with **Azure Monitor for Containers** using the **OMS (Log Analytics) add-on**.  
 This integration automatically collects performance metrics and container logs from the AKS cluster into an Azure Log Analytics Workspace (LAW).
 
+📘 Related blog post:
+[AKS Log Analytics with Terraform — How the FoggyKitchen Module Automates Azure Monitor Integration](https://foggykitchen.com/2025/11/24/aks-log-analytics-terraform/)
+
 ---
 
 ## 📘 Overview

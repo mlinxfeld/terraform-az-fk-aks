@@ -4,6 +4,10 @@ In this lesson, you will learn how to dynamically provision persistent storage i
 
 This module demonstrates how AKS automatically creates and attaches storage resources on Azure — without any manual provisioning through Terraform — using declarative Kubernetes manifests.
 
+📘 Related blog posts:
+1. [Persistent Volumes in AKS with Terraform — The Role of Azure Managed Disks](https://foggykitchen.com/2025/12/09/aks-persistent-storage-terraform/)
+2. [AKS File Share with Terraform — RWX Storage for Multi-Replica Applications](https://foggykitchen.com/2025/12/11/aks-file-share-terraform/)
+
 ---
 
 ## 🚀 Overview

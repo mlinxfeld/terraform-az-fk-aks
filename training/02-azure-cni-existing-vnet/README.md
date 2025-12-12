@@ -3,6 +3,9 @@
 In this example, we’ll deploy an AKS cluster using **Azure CNI** networking instead of Kubenet.
 Pods will receive IP addresses directly from the Virtual Network, enabling full integration with Azure services.
 
+📘 Related blog post:
+[Kubenet vs Azure CNI in AKS – What’s the Difference (with Terraform examples](https://foggykitchen.com/2025/11/14/aks-kubenet-vs-azure-cni/)
+
 ---
 
 ## 🧭 Architecture Overview

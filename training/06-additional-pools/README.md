@@ -4,6 +4,9 @@ In this lesson, we extend the AKS cluster by adding **additional node pools**.
 Each pool can have its own VM size, scaling policy, and labels for targeted workloads.  
 This example provisions a **User Pool** using the module’s `additional_node_pools` variable.
 
+📘 Related blog post:
+[Creating an Additional AKS Node Pool with Terraform/OpenTofu (Step-by-Step)](https://foggykitchen.com/2025/11/28/aks-additional-node-pool-terraform/)
+
 ---
 
 ## 📘 Variables

@@ -3,6 +3,9 @@
 In this first example, we’ll deploy a simple **Azure Kubernetes Service (AKS)** cluster using **Kubenet** networking.
 All resources are created from scratch — Resource Group, Virtual Network, Subnet, and AKS Cluster — making this a perfect starting point for anyone new to AKS or Terraform on Azure.
 
+📘 Related blog post:
+[Kubenet vs Azure CNI in AKS – What’s the Difference (with Terraform examples](https://foggykitchen.com/2025/11/14/aks-kubenet-vs-azure-cni/)
+
 ---
 
 ## 🧭 Architecture Overview

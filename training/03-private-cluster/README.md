@@ -10,6 +10,9 @@ We combine:
 
 This setup ensures that **no public endpoint is exposed**, and all Kubernetes management happens strictly within the trusted network boundary.
 
+📘 Related blog post:
+[Azure Bastion with Terraform — Secure Access to Private AKS Clusters (Hands-On)](https://foggykitchen.com/2025/11/11/azure-bastion-terraform/)
+
 ---
 
 ## 📁 Training Folder Structure
