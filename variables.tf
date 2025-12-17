@@ -21,7 +21,7 @@ variable "resource_group_name" {
 
 variable "kubernetes_version" {
     type = string 
-    default = "1.31.10" 
+    default = "1.33.5" 
 }
 
 # Networking
