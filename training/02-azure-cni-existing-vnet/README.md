@@ -1,25 +1,82 @@
-# Lesson 2: AKS Cluster with Azure CNI (Advanced Networking)
+# Lesson 02: AKS with Azure CNI and Existing VNet
 
-In this example, we’ll deploy an AKS cluster using **Azure CNI** networking instead of Kubenet.
-Pods will receive IP addresses directly from the Virtual Network, enabling full integration with Azure services.
+In this example, we deploy an **Azure Kubernetes Service (AKS)** cluster using **Azure CNI** networking with a dedicated Azure Virtual Network.
+The network is created outside the AKS module with the reusable **FoggyKitchen VNet module**, and then injected into the reusable **FoggyKitchen AKS module** through `vnet_id` and `subnet_id`.
 
-📘 Related blog post:
-[Kubenet vs Azure CNI in AKS – What’s the Difference (with Terraform examples](https://foggykitchen.com/2025/11/14/aks-kubenet-vs-azure-cni/)
+Azure CNI assigns pod IP addresses directly from the VNet subnet, which gives pods first-class connectivity with Azure networking.
+This is the recommended model when AKS must integrate closely with existing Azure services, hub-and-spoke networks, or hybrid connectivity.
 
----
-
-## 🧭 Architecture Overview
-
-This scenario builds upon Lesson 1 and introduces:
-- A pre-created Virtual Network and Subnet for AKS nodes and pods.
-- An AKS Cluster configured with `network_plugin = "azure"`.
-- Optional NSG rules for controlled traffic flow.
-
-> Using Azure CNI allows pod-to-VM communication without NAT — useful for enterprise networking and hybrid connectivity scenarios.
+Related blog post:
+[Kubenet vs Azure CNI in AKS - What's the Difference (with Terraform examples)](https://foggykitchen.com/2025/11/14/aks-kubenet-vs-azure-cni/)
 
 ---
 
-## 🚀 Deployment Steps
+## Architecture Overview
+
+<img src="02-azure-cni-existing-vnet-architecture.png" width="900"/>
+
+This deployment creates:
+- A new **Resource Group**.
+- A dedicated **Azure Virtual Network** using `terraform-az-fk-vnet`.
+- One AKS subnet inside the VNet.
+- An **AKS cluster** using `terraform-az-fk-aks`.
+- Two system nodes attached to the AKS subnet.
+
+The diagram highlights two important Azure CNI concepts:
+- The VNet and subnet are external to the AKS module and are passed into it as existing network inputs.
+- Pods get native VNet connectivity through Azure CNI network interfaces instead of using Kubenet pod routing.
+
+The important difference from Lesson 01 is the networking model:
+- Lesson 01 uses **Kubenet**.
+- Lesson 02 uses **Azure CNI** with a VNet subnet passed into the AKS module.
+
+---
+
+## Module Composition
+
+The VNet is created by the FoggyKitchen VNet module:
+
+```hcl
+module "vnet" {
+  source = "github.com/mlinxfeld/terraform-az-fk-vnet"
+
+  name                = "foggykitchen-vnet"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  address_space = ["10.10.0.0/16"]
+
+  subnets = {
+    foggykitchen-subnet = {
+      address_prefixes = ["10.10.1.0/24"]
+    }
+  }
+}
+```
+
+The AKS module consumes the VNet outputs. This is the network injection point shown in the architecture diagram:
+
+```hcl
+module "aks" {
+  source              = "../.."
+  name                = "fk-aks-cni"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  network_plugin = "azure"
+  vnet_id        = module.vnet.vnet_id
+  subnet_id      = module.vnet.subnet_ids["foggykitchen-subnet"]
+
+  default_node_count   = 2
+  default_node_vm_size = "Standard_D2s_v3"
+}
+```
+
+---
+
+## Deployment Steps
+
+Initialize and apply the OpenTofu configuration:
 
 ```bash
 tofu init
@@ -27,52 +84,46 @@ tofu plan
 tofu apply
 ```
 
-Fetch credentials and verify cluster readiness:
+After deployment, fetch AKS credentials:
 
 ```bash
-mlinxfeld@Martins-MacBook-Pro 01-azure-cni-existing-vnet % az aks get-credentials -g fk-aks-demo-rg -n fk-aks-cni
-Merged "fk-aks-cni" as current context in /Users/mlinxfeld/.kube/config
-
-mlinxfeld@Martins-MacBook-Pro 01-azure-cni-existing-vnet % kubectl get nodes
-NAME                             STATUS   ROLES    AGE     VERSION
-aks-system-16105998-vmss000000   Ready    <none>   9m10s   v1.31.10
-aks-system-16105998-vmss000001   Ready    <none>   9m13s   v1.31.10
-
-mlinxfeld@Martins-MacBook-Pro 01-azure-cni-existing-vnet % kubectl get pods -A -o wide
-NAMESPACE     NAME                                            READY   STATUS    RESTARTS   AGE     IP          NODE                             NOMINATED NODE   READINESS GATES
-kube-system   azure-ip-masq-agent-fdvgq                       1/1     Running   0          9m22s   10.0.1.33   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   azure-ip-masq-agent-z5kpg                       1/1     Running   0          9m19s   10.0.1.4    aks-system-16105998-vmss000000   <none>           <none>
-kube-system   cloud-node-manager-b8zwp                        1/1     Running   0          9m22s   10.0.1.33   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   cloud-node-manager-slhhm                        1/1     Running   0          9m19s   10.0.1.4    aks-system-16105998-vmss000000   <none>           <none>
-kube-system   coredns-789465848c-ng229                        1/1     Running   0          8m55s   10.0.1.16   aks-system-16105998-vmss000000   <none>           <none>
-kube-system   coredns-789465848c-xtzdt                        1/1     Running   0          10m     10.0.1.39   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   coredns-autoscaler-55bcd876cc-5xbp7             1/1     Running   0          10m     10.0.1.41   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   csi-azuredisk-node-dzdt9                        3/3     Running   0          9m19s   10.0.1.4    aks-system-16105998-vmss000000   <none>           <none>
-kube-system   csi-azuredisk-node-hfgln                        3/3     Running   0          9m22s   10.0.1.33   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   csi-azurefile-node-2r7df                        3/3     Running   0          9m22s   10.0.1.33   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   csi-azurefile-node-xxczm                        3/3     Running   0          9m19s   10.0.1.4    aks-system-16105998-vmss000000   <none>           <none>
-kube-system   konnectivity-agent-8cc55cdb8-j68ds              1/1     Running   0          10m     10.0.1.56   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   konnectivity-agent-8cc55cdb8-k9b99              1/1     Running   0          8m55s   10.0.1.18   aks-system-16105998-vmss000000   <none>           <none>
-kube-system   konnectivity-agent-autoscaler-679b77b4f-xx76r   1/1     Running   0          10m     10.0.1.35   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   kube-proxy-6prcr                                1/1     Running   0          9m22s   10.0.1.33   aks-system-16105998-vmss000001   <none>           <none>
-kube-system   kube-proxy-6pzzb                                1/1     Running   0          9m19s   10.0.1.4    aks-system-16105998-vmss000000   <none>           <none>
-kube-system   metrics-server-5c7b55fddd-8lbzj                 2/2     Running   0          8m37s   10.0.1.27   aks-system-16105998-vmss000000   <none>           <none>
-kube-system   metrics-server-5c7b55fddd-vd8w4                 2/2     Running   0          8m37s   10.0.1.20   aks-system-16105998-vmss000000   <none>           <none>
+az aks get-credentials \
+  --resource-group <resource-group-name> \
+  --name fk-aks-cni \
+  --overwrite-existing
 ```
 
-Observe how pods now receive **IP addresses from the VNet subnet**.
+Verify the nodes:
+
+```bash
+kubectl get nodes
+```
+
+Verify that pods receive IP addresses from the VNet subnet:
+
+```bash
+kubectl get pods -A -o wide
+```
+
+You should see pod IPs from the `10.10.1.0/24` subnet.
 
 ---
 
-## 🖼️ Azure Portal View
+## Azure Portal View
 
-<img src="02-azure-cni-existing-vnet.png" width="900"/>
+After deployment, open the AKS cluster in the Azure Portal and inspect **Networking**.
+You should see:
+- Network plugin set to **Azure CNI**.
+- The AKS cluster attached to the VNet created by the VNet module.
+- Node and pod IPs allocated from the AKS subnet.
 
-You’ll see the cluster’s Virtual Network integration under **Networking → Network configuration**.
+<img src="02-azure-cni-existing-vnet-portal.png" width="900"/>
 
 ---
 
-## 🧹 Cleanup
+## Cleanup
+
+To remove all resources created by this example:
 
 ```bash
 tofu destroy
@@ -80,24 +131,26 @@ tofu destroy
 
 ---
 
-### ✅ Summary
+## Summary
 
-This example shows how to:
-- Use **Azure CNI** for full IP-level connectivity between pods and Azure resources.
-- Plan subnet CIDR blocks carefully for large clusters.
-- Compare Kubenet (Lesson 1) vs Azure CNI (Lesson 2).
+This example demonstrates:
+- How to deploy AKS with **Azure CNI** using OpenTofu.
+- How to compose the **FoggyKitchen VNet** and **AKS** modules.
+- How `vnet_id` and `subnet_id` inject external networking into AKS.
+- How Azure CNI gives pods native VNet connectivity.
+- Why subnet sizing matters when pods receive IP addresses directly from Azure networking.
 
-Azure CNI mode is equivalent to the **Enhanced (VCN-Native)** cluster mode in OCI OKE.
-
----
-
-## 🌐 Learn More
-
-Visit [FoggyKitchen.com](https://foggykitchen.com/) for hybrid cloud examples, architecture diagrams, and in-depth learning.
+Azure CNI mode is conceptually similar to VCN-native pod networking in OCI OKE.
 
 ---
 
-## 🪪 License
+## Learn More
 
-Licensed under the Universal Permissive License (UPL), Version 1.0.  
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
+
+---
+
+## License
+
+Licensed under the **Universal Permissive License (UPL), Version 1.0**.  
 See [LICENSE](../../LICENSE) for more details.

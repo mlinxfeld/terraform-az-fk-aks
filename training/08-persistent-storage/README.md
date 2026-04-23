@@ -1,212 +1,157 @@
 # Lesson 08: Persistent Storage in AKS
 
-In this lesson, you will learn how to dynamically provision persistent storage in **Azure Kubernetes Service (AKS)** using **Container Storage Interface (CSI)** drivers for **Azure Disk** and **Azure Files**.
+In this example, we deploy an **Azure Kubernetes Service (AKS)** cluster and let Kubernetes dynamically provision persistent storage through the **CSI drivers** for **Azure Disk** and **Azure Files**. The storage resources are created by the cluster when the PVCs appear, not by Terraform.
 
-This module demonstrates how AKS automatically creates and attaches storage resources on Azure — without any manual provisioning through Terraform — using declarative Kubernetes manifests.
+The example demonstrates storage-backed workloads built from reusable modules:
+- AKS is created with the reusable `terraform-az-fk-aks` module.
+- Default Kubenet networking is created by the AKS module.
+- A sample pod consumes an Azure Disk-backed PVC.
+- A sample deployment consumes an Azure Files-backed PVC.
+- OpenTofu renders the Kubernetes manifests and applies them with `kubectl`.
 
-📘 Related blog posts:
-1. [Persistent Volumes in AKS with Terraform — The Role of Azure Managed Disks](https://foggykitchen.com/2025/12/09/aks-persistent-storage-terraform/)
-2. [AKS File Share with Terraform — RWX Storage for Multi-Replica Applications](https://foggykitchen.com/2025/12/11/aks-file-share-terraform/)
-
----
-
-## 🚀 Overview
-
-The **Azure Disk CSI Driver** and **Azure File CSI Driver** allow you to attach durable storage to your workloads. Kubernetes dynamically provisions Azure-managed storage resources when you create PersistentVolumeClaims (PVCs), using the appropriate StorageClass.
-
-In this exercise, you will:
-- Create a **StorageClass** for Managed Disks (RWO)
-- Create a **StorageClass** for Azure Files (RWX)
-- Deploy sample Pods and Deployments that consume those volumes
-- Observe automatic provisioning of Azure Disks and File Shares in the Azure Portal
+Related blog posts:
+1. [Persistent Volumes in AKS with Terraform - The Role of Azure Managed Disks](https://foggykitchen.com/2025/12/09/aks-persistent-storage-terraform/)
+2. [AKS File Share with Terraform - RWX Storage for Multi-Replica Applications](https://foggykitchen.com/2025/12/11/aks-file-share-terraform/)
 
 ---
 
-## 🧱 Dynamic Provisioning Examples
+## Architecture Overview
 
-### A. Azure Managed Disk (ReadWriteOnce)
+<img src="08-persistent-storage-architecture.png" width="900"/>
 
-This configuration provisions a new **Managed Disk** automatically when the PVC is created.
+This deployment creates:
+- A new **Resource Group**.
+- An **AKS cluster** using `terraform-az-fk-aks`.
+- Default Kubenet networking created by the AKS module.
+- A pod backed by an **Azure Disk** PVC.
+- A deployment backed by an **Azure Files** PVC.
+- Azure-managed storage resources created dynamically by Kubernetes.
 
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: managed-csi
-provisioner: disk.csi.azure.com
-parameters:
-  skuname: StandardSSD_LRS
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: disk-pvc
-spec:
-  accessModes:
-  - ReadWriteOnce
-  storageClassName: managed-csi
-  resources:
-    requests:
-      storage: 5Gi
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: disk-demo
-spec:
-  containers:
-  - name: disk-demo
-    image: nginx
-    volumeMounts:
-    - mountPath: "/mnt/azure"
-      name: volume
-  volumes:
-  - name: volume
-    persistentVolumeClaim:
-      claimName: disk-pvc
+
+## Module Composition
+
+The AKS module creates the cluster and its default Kubenet network:
+
+```hcl
+module "aks" {
+  source              = "../.."
+  name                = "fk-aks-storage"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  create_networking = true
+  network_plugin    = "kubenet"
+}
 ```
 
-Run the following commands to deploy and verify:
+The storage workloads are defined as rendered Kubernetes manifests:
+
+```hcl
+resource "local_file" "disk-demo" {
+  content  = templatefile("${path.module}/manifest/disk-demo.template.yaml", {})
+  filename = "${path.module}/generated/disk-demo.yaml"
+}
+
+resource "local_file" "file-demo" {
+  content  = templatefile("${path.module}/manifest/file-demo.template.yaml", {})
+  filename = "${path.module}/generated/file-demo.yaml"
+}
+```
+
+The manifests create:
+- An Azure Disk `StorageClass`, PVC, and single pod for `ReadWriteOnce`
+- An Azure Files `StorageClass`, PVC, and multi-replica deployment for `ReadWriteMany`
+
+---
+
+## Deployment Steps
+
+Initialize and apply the OpenTofu configuration:
+
 ```bash
-kubectl apply -f generated/disk-demo.yaml
-kubectl get pvc,pv
-kubectl get pods -o wide
+tofu init
+tofu plan
+tofu apply
 ```
 
-💡 **Expected Result:** A new Managed Disk (`kubernetes-dynamic-...`) appears in your AKS resource group.
+During apply, OpenTofu also runs local deployment steps:
+1. Renders the Kubernetes manifests into `generated/disk-demo.yaml` and `generated/file-demo.yaml`.
+2. Retrieves AKS credentials with `az aks get-credentials`.
+3. Applies both manifests.
+4. Waits for the disk-backed pod and the file-backed deployment.
+5. Prints PVC, PV, and pod status.
 
 ---
 
-### B. Azure Files (ReadWriteMany)
+## Verification
 
-This configuration provisions a new **File Share** inside a dynamically created **Storage Account**.
+Check the storage objects:
 
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: azurefile-csi
-provisioner: file.csi.azure.com
-parameters:
-  skuName: Standard_LRS
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: file-pvc
-spec:
-  accessModes:
-  - ReadWriteMany
-  storageClassName: azurefile-csi
-  resources:
-    requests:
-      storage: 5Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: file-demo
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: file-demo
-  template:
-    metadata:
-      labels:
-        app: file-demo
-    spec:
-      containers:
-      - name: nginx
-        image: nginx
-        volumeMounts:
-        - mountPath: "/mnt/azurefile"
-          name: volume
-      volumes:
-      - name: volume
-        persistentVolumeClaim:
-          claimName: file-pvc
-```
-
-Deploy and check resources:
-```bash
-kubectl apply -f generated/file-demo.yaml
-kubectl get pvc,pv
-kubectl get pods -o wide
-```
-
-�� **Expected Result:** A new Azure Storage Account with a File Share (`kubernetes-dynamic-...`) is automatically created.
-
----
-
-## 🖼️ Azure Portal View
-
-<img src="08-persistent-storage.png" width="900"/>
-
-You can see both dynamically created resources:
-- A Managed Disk used by the Azure Disk CSI driver (RWO)
-- A Storage Account with File Share used by the Azure File CSI driver (RWX)
-
----
-
-## 🔍 Validation & Insights
-
-Check the created volumes and their bindings:
 ```bash
 kubectl get sc,pvc,pv
-kubectl describe pvc disk-pvc
-kubectl describe pvc file-pvc
+kubectl get pods -o wide
 ```
 
-Inspect pod mounts:
+Inspect the mounts:
+
 ```bash
 kubectl exec -it disk-demo -- df -h /mnt/azure
 kubectl exec -it deploy/file-demo -c nginx -- df -h /mnt/azurefile
 ```
 
-In Azure Portal, verify that AKS created the following:
-- A Managed Disk with prefix `kubernetes-dynamic-...`
-- A Storage Account (typically `mc_...`) containing the dynamic File Share
+In a verified run, `tofu apply` completed with:
+
+```text
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+```
+
+The disk-backed pod and file-backed deployment were running, and Azure created the dynamic storage resources in the AKS resource group.
 
 ---
 
-## 🧠 Key Concepts
+## Azure Portal View
 
-- **CSI (Container Storage Interface)** allows Kubernetes to dynamically request cloud storage.
-- **ReadWriteOnce (RWO)** volumes can be mounted by a single node at a time.
-- **ReadWriteMany (RWX)** volumes can be mounted by multiple nodes simultaneously.
-- AKS automatically provisions the corresponding Azure resources when PVCs are created.
+Open the AKS cluster in the Azure Portal and look at the managed resources created for the cluster. You should see the dynamic Azure Disk and the storage account with the file share provisioned by the CSI drivers.
+
+<img src="08-persistent-storage-portal.png" width="900"/>
 
 ---
 
-## 🧹 Cleanup
+## Cleanup
 
-Remove resources when done:
+To remove all resources created by this example:
+
+```bash
+tofu destroy
+```
+
+Delete the generated Kubernetes objects before destroy if you want the PVC-backed storage to be removed immediately:
+
 ```bash
 kubectl delete -f generated/disk-demo.yaml
 kubectl delete -f generated/file-demo.yaml
 ```
-This will also delete the dynamically provisioned Disks and File Shares.
 
 ---
 
-## 🌐 Learn More
+## Summary
 
-Visit [FoggyKitchen.com](https://foggykitchen.com/) for more hybrid cloud examples, architecture diagrams, and in-depth learning.
+This example demonstrates:
+- How to deploy AKS with OpenTofu.
+- How to use CSI drivers for Azure Disk and Azure Files.
+- How to provision storage dynamically from Kubernetes PVCs.
+- How to run RWO and RWX workloads on AKS.
 
 ---
 
-## 🪪 License
+## Learn More
+
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
+
+---
+
+## License
 
 Licensed under the Universal Permissive License (UPL), Version 1.0.  
 See [LICENSE](../../LICENSE) for more details.
-
----
-
-💡 *In the upcoming AKS vs OKE course, we’ll explore how to pre-provision Azure Files and OCI File Storage via Terraform and attach them to workloads declaratively.*
-
-

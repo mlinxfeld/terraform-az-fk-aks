@@ -1,25 +1,21 @@
-resource "azurerm_linux_virtual_machine" "foggykitchen_jump_vm" {
-  name                = "foggykitchen_jump_vm"
-  computer_name       = "fkprivatevm"
+module "jump_vm" {
+  source = "github.com/mlinxfeld/terraform-az-fk-compute"
+
+  name                = "foggykitchen-jump-vm"
   location            = azurerm_resource_group.foggykitchen_rg.location
   resource_group_name = azurerm_resource_group.foggykitchen_rg.name
-  size                = "Standard_B1s"
-  admin_username      = "azureuser"
-  network_interface_ids = [
-    azurerm_network_interface.foggykitchen_jump_vm_nic.id
-  ]
 
-  admin_ssh_key {
-    username   = "azureuser"
-    public_key = tls_private_key.public_private_key_pair.public_key_openssh
-  }
+  deployment_mode = "vm"
+  subnet_id       = module.vnet.subnet_ids["foggykitchen-private-subnet"]
 
-  os_disk {
-    caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
-  }
+  admin_username = "azureuser"
+  ssh_public_key = tls_private_key.public_private_key_pair.public_key_openssh
+  vm_size        = "Standard_B1s"
 
-  source_image_reference {
+  attach_nsg_to_nic = true
+  nsg_id            = module.jump_vm_nsg.id
+
+  image_reference = {
     publisher = "Canonical"
     offer     = "0001-com-ubuntu-server-focal"
     sku       = "20_04-lts"

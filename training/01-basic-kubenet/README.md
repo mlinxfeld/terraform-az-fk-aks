@@ -1,28 +1,61 @@
-# Lesson 1: Basic AKS Cluster (Kubenet Networking)
+# Lesson 01: Basic AKS with Kubenet
 
-In this first example, we’ll deploy a simple **Azure Kubernetes Service (AKS)** cluster using **Kubenet** networking.
-All resources are created from scratch — Resource Group, Virtual Network, Subnet, and AKS Cluster — making this a perfect starting point for anyone new to AKS or Terraform on Azure.
+In this first example, we deploy a minimal **Azure Kubernetes Service (AKS)** cluster using **Kubenet** networking.
+The cluster, Resource Group, and basic networking are created through the reusable **FoggyKitchen AKS module**.
 
-📘 Related blog post:
-[Kubenet vs Azure CNI in AKS – What’s the Difference (with Terraform examples](https://foggykitchen.com/2025/11/14/aks-kubenet-vs-azure-cni/)
+This lesson is intentionally small. It is the baseline for comparing Kubenet with the Azure CNI setup used in Lesson 02.
+
+Related blog post:
+[Kubenet vs Azure CNI in AKS - What's the Difference (with Terraform examples)](https://foggykitchen.com/2025/11/14/aks-kubenet-vs-azure-cni/)
 
 ---
 
-## 🧭 Architecture Overview
+## Architecture Overview
+
+<img src="01-basic-kubenet-architecture.png" width="900"/>
 
 This deployment creates:
-- A new **Resource Group** for AKS.
-- A **Virtual Network** with a single subnet for AKS nodes.
-- An **AKS Cluster** with default node pool (2 nodes, Kubenet plugin).
-- SSH access enabled for management.
+- A new **Resource Group**.
+- A basic AKS VNet and subnet created automatically by `terraform-az-fk-aks`.
+- An **AKS cluster** using Kubenet networking.
+- One default system node pool.
 
-> AKS Control Plane is public in this example, meaning you can interact with the cluster directly from your workstation.
+With `create_networking = true`, the AKS module creates:
+- `fk-aks-demo-vnet` with address space `10.10.0.0/16`.
+- `fk-aks-demo-subnet` with address prefix `10.10.1.0/24`.
+
+Kubenet keeps pod networking separate from the VNet subnet. In the Azure Portal, the cluster appears with `kubenet` as its network configuration and a Pod CIDR assigned by AKS.
 
 ---
 
-## 🚀 Deployment Steps
+## Module Composition
 
-Initialize and apply Terraform configuration:
+The whole baseline environment is created by the FoggyKitchen AKS module:
+
+```hcl
+module "aks" {
+  source = "../.."
+
+  name                = "fk-aks-demo"
+  create_rg           = true
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+  create_networking = true
+  network_plugin    = "kubenet"
+}
+```
+
+The important settings are:
+- `create_rg = true` creates the Resource Group inside the AKS module.
+- `create_networking = true` creates the VNet and subnet inside the AKS module.
+- `network_plugin = "kubenet"` selects Kubenet networking for this baseline cluster.
+
+---
+
+## Deployment Steps
+
+Initialize and apply the OpenTofu configuration:
 
 ```bash
 tofu init
@@ -30,28 +63,36 @@ tofu plan
 tofu apply
 ```
 
-After the cluster is ready, fetch credentials and verify connectivity:
+After deployment, fetch AKS credentials:
 
 ```bash
-mlinxfeld@Martins-MacBook-Pro 01-basic-kubenet % az aks get-credentials -g fk-aks-demo-rg -n fk-aks-demo
-Merged "fk-aks-demo" as current context in /Users/mlinxfeld/.kube/config
+az aks get-credentials \
+  --resource-group <resource-group-name> \
+  --name fk-aks-demo \
+  --overwrite-existing
+```
 
-mlinxfeld@Martins-MacBook-Pro 01-basic-kubenet % kubectl get nodes
-NAME                             STATUS   ROLES    AGE     VERSION
-aks-system-37715129-vmss000000   Ready    <none>   4m27s   v1.31.10
+Verify the node pool:
+
+```bash
+kubectl get nodes
 ```
 
 ---
 
-## 🖼️ Azure Portal View
+## Azure Portal View
 
-Below you can see the resulting Kubenet-based AKS cluster in the Azure Portal:
+After deployment, open the AKS cluster in the Azure Portal and inspect **Networking**.
+You should see:
+- Network configuration set to **kubenet**.
+- A Pod CIDR assigned by AKS.
+- One system node pool.
 
-<img src="01-basic-kubenet.png" width="900"/>
+<img src="01-basic-kubenet-portal.png" width="900"/>
 
 ---
 
-## 🧹 Cleanup
+## Cleanup
 
 To remove all resources created by this example:
 
@@ -61,22 +102,22 @@ tofu destroy
 
 ---
 
-### ✅ Summary
+## Summary
 
 This example demonstrates:
-- Provisioning a **basic AKS cluster** with Kubenet networking.
-- How Azure automatically handles routing between pods and nodes.
-- How to connect to the cluster directly from your workstation.
+- How to deploy a basic AKS cluster with **Kubenet** using OpenTofu.
+- How the AKS module can create both the Resource Group and basic networking.
+- The baseline networking model used for comparison with Azure CNI in Lesson 02.
 
 ---
 
-## 🌐 Learn More
+## Learn More
 
-Visit [FoggyKitchen.com](https://foggykitchen.com/) for hybrid cloud examples, architecture diagrams, and in-depth learning.
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
 
 ---
 
-## 🪪 License
+## License
 
-Licensed under the Universal Permissive License (UPL), Version 1.0.  
+Licensed under the **Universal Permissive License (UPL), Version 1.0**.  
 See [LICENSE](../../LICENSE) for more details.

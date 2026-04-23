@@ -1,9 +1,9 @@
 module "aks" {
-  source              = "github.com/mlinxfeld/terraform-az-fk-aks"
+  source              = "../.."
   name                = "fk-aks-demo"
-  create_rg           = false
-  location            = azurerm_resource_group.foggykitchen_rg.location
-  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+  create_rg           = true
+  location            = var.location
+  resource_group_name = var.resource_group_name
 
   create_networking = true
   network_plugin    = "kubenet"

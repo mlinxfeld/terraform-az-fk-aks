@@ -1,122 +1,247 @@
-# Lesson 05 – AKS with Log Analytics (OMS Monitoring)
+# Lesson 05: AKS with Log Analytics
 
-In this example, we extend our Azure Kubernetes Service (AKS) deployment with **Azure Monitor for Containers** using the **OMS (Log Analytics) add-on**.  
-This integration automatically collects performance metrics and container logs from the AKS cluster into an Azure Log Analytics Workspace (LAW).
+In this example, we deploy an **Azure Kubernetes Service (AKS)** cluster with **Azure Monitor for Containers** enabled through the OMS add-on. The deployment also creates an external **Azure Container Registry (ACR)**, builds a small NGINX-based image with `az acr build`, and deploys it to AKS.
 
-📘 Related blog post:
-[AKS Log Analytics with Terraform — How the FoggyKitchen Module Automates Azure Monitor Integration](https://foggykitchen.com/2025/11/24/aks-log-analytics-terraform/)
+The example demonstrates a monitored AKS workload built from reusable modules:
+- ACR is created with the reusable `terraform-az-fk-acr` module.
+- AKS is created with the reusable `terraform-az-fk-aks` module.
+- The Log Analytics Workspace is created by the AKS module and connected through the `oms_agent` integration.
+- The `AcrPull` permission is created with the reusable `terraform-az-fk-rbac` module.
+- OpenTofu renders the Kubernetes manifest and applies it with `kubectl`.
 
----
-
-## 📘 Overview
-
-In previous examples, we focused on AKS fundamentals (Kubenet, ACR integration, private clusters).  
-Now, we’ll add centralized **monitoring and observability** capabilities using **Azure Monitor**.  
-The deployment will create:
-- An **AKS cluster** (system-assigned identity).
-- A **Log Analytics Workspace (LAW)**.
-- The **OMS agent add-on** enabled on the cluster for log collection.
+Related blog post:
+[AKS Log Analytics with Terraform - How the FoggyKitchen Module Automates Azure Monitor Integration](https://foggykitchen.com/2025/11/24/aks-log-analytics-terraform/)
 
 ---
 
-## 🧱 Terraform Configuration Highlights
+## Architecture Overview
 
-- `azurerm_log_analytics_workspace` – creates the workspace for logs and metrics.
-- `azurerm_kubernetes_cluster` → `oms_agent` block – connects AKS with LAW.
-- Logs and metrics will be visible in Azure Portal → **AKS → Insights** and **LAW → Logs**.
+<img src="05-with-log-analytics-architecture.png" width="900"/>
 
-Example snippet from module:
+This deployment creates:
+- A new **Resource Group**.
+- An **Azure Container Registry** using `terraform-az-fk-acr`.
+- An **AKS cluster** using `terraform-az-fk-aks`.
+- Default Kubenet networking created by the AKS module.
+- A **Log Analytics Workspace** created by the AKS module.
+- The AKS **OMS agent** add-on connected to the workspace.
+- An `AcrPull` role assignment using `terraform-az-fk-rbac`.
+- A Kubernetes Deployment that pulls `hello:1.0` from ACR.
+- A public Kubernetes `LoadBalancer` Service for the sample app.
+
+---
+
+## Module Composition
+
+The ACR module creates the external registry:
 
 ```hcl
-resource "azurerm_log_analytics_workspace" "law" {
-  name                = "${var.name}-law"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
+module "acr" {
+  source = "github.com/mlinxfeld/terraform-az-fk-acr"
+
+  acr_name            = var.acr_name
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  sku           = "Basic"
+  admin_enabled = false
 }
+```
 
-resource "azurerm_kubernetes_cluster" "this" {
-  name                = var.name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  dns_prefix          = var.name
+The AKS module creates the cluster, its default Kubenet network, and the Log Analytics Workspace:
 
-  default_node_pool {
-    name       = "system"
-    vm_size    = "Standard_D2s_v3"
-    node_count = 1
-  }
+```hcl
+module "aks" {
+  source              = "../.."
+  name                = "fk-aks-law"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
 
-  identity {
-    type = "SystemAssigned"
-  }
+  create_networking = true
+  network_plugin    = "kubenet"
 
-  network_profile {
-    network_plugin    = "kubenet"
-    load_balancer_sku = "standard"
-    service_cidr      = "10.200.0.0/16"
-    dns_service_ip    = "10.200.0.10"
-  }
+  enable_log_analytics = true
+  create_law           = true
+  monitoring_mode      = "oms"
+}
+```
 
-  oms_agent {
-    log_analytics_workspace_id = azurerm_log_analytics_workspace.law.id
-  }
+The RBAC module grants the AKS kubelet identity permission to pull images from ACR:
+
+```hcl
+module "acr_pull" {
+  source = "github.com/mlinxfeld/terraform-az-fk-rbac"
+
+  scope                = module.acr.acr_id
+  principal_id         = module.aks.kubelet_object_id
+  role_definition_name = "AcrPull"
 }
 ```
 
 ---
 
-## 🔍 Where to See OMS in Azure Portal
+## Deployment Steps
 
-Once deployed, your monitoring data becomes available across multiple Azure views:
+ACR names must be globally unique in Azure. If `fkacr1` is already taken, set another value:
 
-### **1️⃣ AKS → Insights**
-Navigate to:
+```hcl
+acr_name = "fkacr12345"
 ```
-Azure Portal → AKS Cluster → Insights
-```
-View metrics for **Nodes**, **Controllers**, and **Containers**.
 
-### **2️⃣ Log Analytics Workspace → Logs**
+Initialize and apply the OpenTofu configuration:
+
+```bash
+tofu init
+tofu plan
+tofu apply
 ```
-Azure Portal → Log Analytics Workspace → Logs
+
+During apply, OpenTofu also runs local deployment steps:
+1. Renders the Dockerfile, index page, and Kubernetes manifest.
+2. Builds and pushes the image with `az acr build`.
+3. Retrieves AKS credentials with `az aks get-credentials`.
+4. Applies the Kubernetes manifest.
+5. Waits for the deployment rollout.
+
+---
+
+## Verification
+
+Check the registry, cluster, and Log Analytics outputs:
+
+```bash
+tofu output acr_name
+tofu output acr_login_server
+tofu output cluster_name
+tofu output log_analytics_workspace_id
 ```
-Run KQL queries such as:
-```kusto
-ContainerLog | take 20
+
+Verify the OMS add-on configuration:
+
+```bash
+az aks show \
+  -g fk-aks-demo-rg \
+  -n fk-aks-law \
+  --query addonProfiles.omsagent
 ```
-You can explore tables like:
+
+Verify the workload:
+
+```bash
+kubectl get pods
+kubectl get svc fk-acr-demo-svc
+```
+
+Wait until the service has an external IP, then test the app:
+
+```bash
+APP_IP=$(kubectl get svc fk-acr-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl "http://${APP_IP}"
+```
+
+Expected response:
+
+```text
+Hello, here is FoggyKitchen.com deployed in AKS based on image taken from ACR (<acr-login-server>/hello:1.0)!
+```
+
+You can also verify that AKS can pull from ACR through the role assignment:
+
+```bash
+az role assignment list \
+  --scope $(tofu output -raw acr_id) \
+  --query "[].{role:roleDefinitionName, principal:principalId}" \
+  -o table
+```
+
+Container logs and inventory become available in the Log Analytics Workspace after Azure Monitor starts collecting data. Useful KQL tables include:
 - `ContainerLog`
 - `KubePodInventory`
 - `InsightsMetrics`
 - `Perf`
 
-### **3️⃣ AKS → Properties → Monitoring**
-Shows the linked Log Analytics Workspace ID.
+Telemetry ingestion is not immediate. After a fresh `tofu apply`, wait about 5 minutes before expecting Kubernetes inventory and metrics to appear in Log Analytics.
 
-### **4️⃣ CLI verification**
-```bash
-az aks show -g fk-aks-demo-rg -n fk-aks-monitor --query addonProfiles.omsagent
+Check whether data has arrived:
+
+```kusto
+KubePodInventory
+| count
+```
+
+Example query:
+
+```kusto
+KubePodInventory
+| where Namespace == "default"
+| take 20
 ```
 
 ---
 
-## 🖼️ Azure Portal View
+## Azure Portal View
 
-<img src="05-with-log-analytics.png" width="900"/>
+Open the AKS cluster in the Azure Portal and go to **Insights**. You should see the cluster connected to the Log Analytics Workspace created by the module.
 
-Example of container logs from Log Analytics Workspace (LAW).
+Open the Log Analytics Workspace and go to **Logs** to query collected Kubernetes telemetry.
 
----
-
-## 🌐 Learn More
-
-Visit [FoggyKitchen.com](https://foggykitchen.com/) for more hybrid cloud examples, architecture diagrams, and in-depth learning.
+<img src="05-with-log-analytics-portal.png" width="900"/>
 
 ---
 
-## 🪪 License
+## Cleanup
+
+To remove all resources created by this example:
+
+```bash
+tofu destroy
+```
+
+When Azure Monitor for Containers is enabled, Azure can create an additional solution resource in the same resource group:
+
+```text
+Microsoft.OperationsManagement/solutions/ContainerInsights(<workspace-name>)
+```
+
+If `tofu destroy` removes the AKS cluster, ACR, Log Analytics Workspace, and networking but then fails while deleting the resource group because this `ContainerInsights(...)` resource still exists, remove the solution resource with Azure CLI and rerun `tofu destroy`:
+
+```bash
+az resource delete \
+  --ids "/subscriptions/<subscription-id>/resourceGroups/fk-aks-demo-rg/providers/Microsoft.OperationsManagement/solutions/ContainerInsights(fk-aks-law-law)"
+
+tofu destroy
+```
+
+You can list remaining resources in the resource group with:
+
+```bash
+az resource list \
+  -g fk-aks-demo-rg \
+  --query "[].{name:name,type:type}" \
+  -o table
+```
+
+---
+
+## Summary
+
+This example demonstrates:
+- How to deploy AKS with OpenTofu.
+- How to enable Azure Monitor for Containers through the OMS add-on.
+- How to create a Log Analytics Workspace through the AKS module.
+- How to create ACR with a separate reusable module.
+- How to grant AKS access to ACR with a separate RBAC module.
+- How to deploy and expose a workload whose logs can be collected by Azure Monitor.
+
+---
+
+## Learn More
+
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
+
+---
+
+## License
 
 Licensed under the Universal Permissive License (UPL), Version 1.0.  
 See [LICENSE](../../LICENSE) for more details.

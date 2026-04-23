@@ -15,6 +15,7 @@ resource "null_resource" "kubectl_apply" {
       "az aks get-credentials -g ${azurerm_resource_group.foggykitchen_rg.name} -n ${module.aks.cluster_name} --overwrite-existing",
       "kubectl get nodes -L agentpool,workload,sku",
       "kubectl apply -f ${path.module}/generated/heavy-deploy.yaml",
+      "kubectl rollout status deploy/heavy-deploy --timeout=600s",
       "kubectl get pods -l app=heavy -o wide"
     ])
   }

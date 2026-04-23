@@ -25,6 +25,8 @@ resource "null_resource" "kubectl_apply" {
       "kubectl apply -f ${path.module}/generated/file-demo.yaml",
       "kubectl get pvc",
       "kubectl get pv",
+      "kubectl wait --for=condition=Ready pod/disk-demo --timeout=180s",
+      "kubectl rollout status deploy/file-demo --timeout=180s",
       "kubectl get pods -o wide"
     ])
   }

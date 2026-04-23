@@ -1,170 +1,177 @@
 # Lesson 07: AKS Cluster Autoscaling
 
-In this lesson, you will learn how to enable and test **Cluster Autoscaler** in Azure Kubernetes Service (AKS). The autoscaler dynamically adjusts the number of nodes in your node pool based on the resource requirements of your running pods.
+In this example, we deploy an **Azure Kubernetes Service (AKS)** cluster with an additional **User** node pool configured for **Cluster Autoscaler**. The user pool starts at zero nodes and scales up when a workload cannot be scheduled immediately.
 
-This lesson builds directly on top of the module from [Lesson 06](../06-additional-pools) and focuses on scaling behavior under load.
+The example builds on the reusable AKS module pattern from [Lesson 06](../06-additional-pools) and focuses on scaling behavior under load:
+- AKS is created with the reusable `terraform-az-fk-aks` module.
+- Default Kubenet networking is created by the AKS module.
+- A user node pool named `userpool` is configured with autoscaling enabled.
+- A CPU-heavy workload is deployed to trigger scale-up.
+- OpenTofu renders the Kubernetes manifest and applies it with `kubectl`.
 
-📘 Related blog post:
-[AKS Autoscaling Node Pools with Terraform/OpenTofu — Turning Static Clusters into Elastic Infrastructure](https://foggykitchen.com/2025/12/07/aks-autoscaler-terraform/)
-
----
-
-## 🚀 Overview
-
-The **Cluster Autoscaler** monitors pods that cannot be scheduled due to insufficient resources. When it detects such pods, it automatically scales up the number of nodes in the pool. Conversely, when nodes are underutilized for an extended period, it scales down to save costs.
-
-In this exercise, you will:
-- Configure a **User Pool** with autoscaling enabled.
-- Deploy a CPU-intensive workload that triggers scale-up.
-- Observe AKS dynamically adding new nodes.
+Related blog post:
+[AKS Autoscaling Node Pools with Terraform/OpenTofu - Turning Static Clusters into Elastic Infrastructure](https://foggykitchen.com/2025/12/07/aks-autoscaler-terraform/)
 
 ---
 
-## 🧱 Terraform Configuration
+## Architecture Overview
 
-The module definition for the additional node pool includes autoscaling parameters:
+<img src="07-autoscaling-architecture.png" width="900"/>
+
+This deployment creates:
+- A new **Resource Group**.
+- An **AKS cluster** using `terraform-az-fk-aks`.
+- Default Kubenet networking created by the AKS module.
+- The default `system` node pool.
+- An additional `userpool` configured with Cluster Autoscaler.
+- A workload that drives the user pool from zero to multiple nodes.
+
+---
+
+## Module Composition
+
+The AKS module creates the cluster and the autoscaled user pool:
 
 ```hcl
-variable "additional_node_pools" {
-  description = "Additional Node Pool definition"
-  default = [
-    {
-      name                 = "userpool"
-      vm_size              = "Standard_D2s_v3"
-      node_count           = 0                 # Autoscaler starts from 0
-      mode                 = "User"
-      orchestrator_version = null
-      subnet_id            = null
-      taints               = []                # No taints for simplicity
-      labels               = { workload = "apps", sku = "general" }
-      max_pods             = 30
-      enable_auto_scaling  = true
-      min_count            = 0
-      max_count            = 3
-      spot                 = false
-    }
-  ]
+module "aks" {
+  source              = "../.."
+  name                = "fk-aks-autoscale"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  create_networking = true
+  network_plugin    = "kubenet"
+
+  additional_node_pools = var.additional_node_pools
 }
 ```
 
-After applying the configuration, your cluster will have a **system pool** and one **user pool** configured for autoscaling.
+The autoscaled user pool is defined as input data:
 
----
+```hcl
+additional_node_pools = [
+  {
+    name                 = "userpool"
+    vm_size              = "Standard_D2s_v3"
+    node_count           = 0
+    mode                 = "User"
+    orchestrator_version = null
+    subnet_id            = null
+    taints               = ["dedicated=user:NoSchedule"]
+    labels               = { workload = "apps", sku = "general" }
+    max_pods             = 30
+    enable_auto_scaling   = true
+    min_count            = 0
+    max_count            = 3
+    spot                 = false
+  }
+]
+```
 
-## 🧩 Workload Manifest
-
-The deployment below creates multiple CPU-bound pods to trigger a scale-up event.
+The workload targets the user pool with a matching toleration and node selector:
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: heavy-deploy
-spec:
-  replicas: 25
-  selector:
-    matchLabels:
-      app: heavy
-  template:
-    metadata:
-      labels:
-        app: heavy
-    spec:
-      tolerations:
-      - key: "dedicated"
-        operator: "Equal"
-        value: "user"
-        effect: "NoSchedule"
-      nodeSelector:
-        workload: "apps"
-      containers:
-      - name: cpu-burn
-        image: nginx:stable
-        resources:
-          requests:
-            cpu: "250m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "256Mi"
-        ports:
-        - containerPort: 80
+tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "user"
+    effect: "NoSchedule"
+nodeSelector:
+  workload: "apps"
 ```
-
-Deploy it using:
-```bash
-kubectl apply -f generated/heavy-deploy.yaml
-kubectl get pods -l app=heavy -o wide
-```
-
-You should see many pods in the **Pending** state initially — then the Cluster Autoscaler will automatically start provisioning new nodes to accommodate them.
 
 ---
 
-## 🖼️ Azure Portal View
+## Deployment Steps
 
-<img src="07-autoscaling.png" width="900"/>
+Initialize and apply the OpenTofu configuration:
 
-The **Node Pools** tab in the Azure Portal shows how the `userpool` dynamically scales from 0 to multiple nodes in response to load.
+```bash
+tofu init
+tofu plan
+tofu apply
+```
+
+During apply, OpenTofu also runs local deployment steps:
+1. Renders the Kubernetes manifest into `generated/heavy-deploy.yaml`.
+2. Retrieves AKS credentials with `az aks get-credentials`.
+3. Lists nodes with their `agentpool`, `workload`, and `sku` labels.
+4. Applies the Kubernetes manifest.
+5. Waits for the deployment rollout.
+
+Scale-from-zero can take several minutes. The user pool may stay at `0` nodes until the scheduler sees Pending pods that match the pool template.
+
+The initial rollout can take longer than a few minutes while the autoscaler provisions the first user-pool nodes. If you see the rollout waiting, that is expected.
 
 ---
 
-## 🔍 Observing Autoscaling Activity
+## Verification
 
-### Watch node changes
-```bash
-kubectl get nodes -w
-```
+Check the cluster and node pool:
 
-### Check pending pods
 ```bash
-kubectl get pods -l app=heavy -o wide
-```
-
-### Describe a single pod to see scheduling reasons
-```bash
-POD=$(kubectl get pods -l app=heavy -o jsonpath='{.items[0].metadata.name}')
-kubectl describe pod $POD | sed -n '/Events/,$p'
-```
-
-### View autoscaler logs
-```bash
-kubectl -n kube-system logs -l app=cluster-autoscaler --tail=200 --timestamps
-```
-
-### Inspect node pool details
-```bash
+kubectl get nodes -L agentpool,workload,sku
 az aks nodepool show -g fk-aks-demo-rg --cluster-name fk-aks-autoscale -n userpool \
   --query "{scale:enableAutoScaling,min:minCount,max:maxCount,labels:nodeLabels}"
 ```
 
----
+Observe the workload:
 
-## 🧠 Key Concepts
-
-- **Scale from zero** requires the scheduler to match pods with the node pool template (labels, taints, selectors).
-- **Cluster Autoscaler** reacts to Pending pods; provisioning may take several minutes.
-
----
-
-## 🧹 Cleanup
-
-To remove resources:
 ```bash
-kubectl delete -f generated/heavy-deploy.yaml --ignore-not-found
+kubectl get pods -l app=heavy -o wide
+```
 
+In a verified run, `tofu apply` completed with:
+
+```text
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+```
+
+The cluster started with one `system` node and the `userpool` scaled up to multiple nodes after the workload was applied.
+
+You can also inspect autoscaler activity:
+
+```bash
+kubectl -n kube-system logs -l app=cluster-autoscaler --tail=200 --timestamps
+```
+
+---
+
+## Azure Portal View
+
+Open the AKS cluster in the Azure Portal and go to **Node pools**. You should see the default `system` pool and the additional `userpool` scaling up in response to load.
+
+<img src="07-autoscaling-portal.png" width="900"/>
+
+---
+
+## Cleanup
+
+To remove all resources created by this example:
+
+```bash
 tofu destroy
 ```
 
 ---
 
-## 🌐 Learn More
+## Summary
 
-Visit [FoggyKitchen.com](https://foggykitchen.com/) for more hybrid cloud examples, architecture diagrams, and in-depth learning.
+This example demonstrates:
+- How to deploy AKS with OpenTofu.
+- How to configure an additional node pool with Cluster Autoscaler.
+- How to use labels and taints for workload separation.
+- How to trigger scale-up with a Kubernetes workload.
 
 ---
 
-## 🪪 License
+## Learn More
+
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
+
+---
+
+## License
 
 Licensed under the Universal Permissive License (UPL), Version 1.0.  
 See [LICENSE](../../LICENSE) for more details.

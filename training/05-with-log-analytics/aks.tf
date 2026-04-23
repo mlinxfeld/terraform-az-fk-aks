@@ -1,5 +1,5 @@
 module "aks" {
-  source              = "github.com/mlinxfeld/terraform-az-fk-aks"
+  source              = "../.."
   name                = "fk-aks-law"
   location            = azurerm_resource_group.foggykitchen_rg.location
   resource_group_name = azurerm_resource_group.foggykitchen_rg.name
@@ -9,6 +9,5 @@ module "aks" {
 
   enable_log_analytics = true
   create_law           = true
-  monitoring_mode      = "oms"                  
+  monitoring_mode      = "oms"
 }
-

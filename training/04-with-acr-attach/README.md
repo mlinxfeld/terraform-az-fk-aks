@@ -1,177 +1,209 @@
-# Lesson 04: AKS Deployment with ACR and Public Load Balancer
+# Lesson 04: AKS with Azure Container Registry
 
-This example demonstrates how to build a container image in **Azure Container Registry (ACR)** and deploy it to an **Azure Kubernetes Service (AKS)** cluster using Terraform/OpenTofu. The workload is exposed publicly via a **LoadBalancer** service type.
+In this example, we deploy an **Azure Kubernetes Service (AKS)** cluster and a dedicated **Azure Container Registry (ACR)**. A small NGINX-based image is built in ACR with `az acr build`, then deployed to AKS from that registry.
 
-📘 Related blog post:
+The example demonstrates the common AKS and ACR integration pattern:
+- ACR is created with the reusable `terraform-az-fk-acr` module.
+- AKS is created with the reusable `terraform-az-fk-aks` module.
+- The `AcrPull` permission is created with the reusable `terraform-az-fk-rbac` module.
+- The RBAC assignment connects the AKS kubelet identity to the ACR scope.
+- OpenTofu renders the Kubernetes manifest and applies it with `kubectl`.
+
+Related blog post:
 [Deploying Container Images to AKS Using Azure Container Registry: Why It Matters](https://foggykitchen.com/2025/11/21/azure-container-registry-terraform/)
 
 ---
 
-## 🧱 Architecture Overview
+## Architecture Overview
 
-- ACR hosts the container image (`fkacr1.azurecr.io/hello:1.0`)
-- AKS cluster is provisioned in the same virtual network
-- Terraform automates:
-  - ACR build and push (`az acr build`)
-  - Kubernetes manifest rendering (`templatefile`)
-  - Deployment rollout validation
-- A public Azure Load Balancer exposes the service to the Internet
+<img src="04-with-acr-attach-architecture.png" width="900"/>
+
+This deployment creates:
+- A new **Resource Group**.
+- An **Azure Container Registry** using `terraform-az-fk-acr`.
+- An **AKS cluster** using `terraform-az-fk-aks`.
+- Default Kubenet networking created by the AKS module.
+- An `AcrPull` role assignment using `terraform-az-fk-rbac`.
+- A Kubernetes Deployment that pulls `hello:1.0` from ACR.
+- A public Kubernetes `LoadBalancer` Service for the sample app.
 
 ---
 
-## ⚙️ Deployment Steps
+## Module Composition
+
+The ACR module creates the external registry:
+
+```hcl
+module "acr" {
+  source = "github.com/mlinxfeld/terraform-az-fk-acr"
+
+  acr_name            = var.acr_name
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  sku           = "Basic"
+  admin_enabled = false
+}
+```
+
+The AKS module creates the cluster and its default Kubenet network:
+
+```hcl
+module "aks" {
+  source              = "../.."
+  name                = "fk-aks-acr"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  create_networking = true
+  network_plugin    = "kubenet"
+}
+```
+
+The RBAC module grants the AKS kubelet identity permission to pull images from ACR:
+
+```hcl
+module "acr_pull" {
+  source = "github.com/mlinxfeld/terraform-az-fk-rbac"
+
+  scope                = module.acr.acr_id
+  principal_id         = module.aks.kubelet_object_id
+  role_definition_name = "AcrPull"
+}
+```
+
+---
+
+## Deployment Steps
+
+ACR names must be globally unique in Azure. If `fkacr1` is already taken, set another value:
+
+```hcl
+acr_name = "fkacr12345"
+```
+
+Initialize and apply the OpenTofu configuration:
 
 ```bash
 tofu init
+tofu plan
 tofu apply
 ```
 
-After the cluster and ACR are ready, Terraform will:
-1. Build and push the container image to ACR.
-2. Deploy the Kubernetes manifest (`fk-acr-demo.yaml`) using `kubectl`.
-3. Wait for the rollout status.
+During apply, OpenTofu also runs local deployment steps:
+1. Renders the Dockerfile, index page, and Kubernetes manifest.
+2. Builds and pushes the image with `az acr build`.
+3. Retrieves AKS credentials with `az aks get-credentials`.
+4. Applies the Kubernetes manifest.
+5. Waits for the deployment rollout.
 
-Example output:
+The image is tagged as:
 
-```bash
-Apply complete! Resources: 11 added, 0 changed, 0 destroyed.
-
-Outputs:
-
-acr_login_server = "fkacr1.azurecr.io"
+```text
+<acr-login-server>/hello:1.0
 ```
 
-Verify that the pod is running and the service has an external IP:
+---
+
+## Verification
+
+Check the registry and cluster outputs:
+
+```bash
+tofu output acr_name
+tofu output acr_login_server
+tofu output cluster_name
+```
+
+Verify the workload:
 
 ```bash
 kubectl get pods
 kubectl get svc fk-acr-demo-svc
 ```
 
-Example output:
+In a verified run, the deployment completed during `tofu apply` and the service received a public LoadBalancer IP:
+
+```text
+NAME                           READY   STATUS    RESTARTS   AGE
+fk-acr-demo-86685f5c48-hh2wb   1/1     Running   0          43s
+
+NAME              TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)
+fk-acr-demo-svc   LoadBalancer   10.200.181.1   128.251.180.53   80:30375/TCP
+```
+
+Wait until the service has an external IP, then test the app:
 
 ```bash
-NAME              TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)        AGE
-fk-acr-demo-svc   LoadBalancer   10.200.184.22   135.236.43.64   80:32209/TCP   80m
+APP_IP=$(kubectl get svc fk-acr-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl "http://${APP_IP}"
 ```
 
-Then access your app publicly:
+Expected response:
+
+```text
+Hello, here is FoggyKitchen.com deployed in AKS based on image taken from ACR (<acr-login-server>/hello:1.0)!
+```
+
+If you run the test from a restricted execution environment, make sure outbound HTTP to the LoadBalancer IP is allowed. The Kubernetes deployment can also be checked from inside the cluster:
 
 ```bash
-curl http://135.236.43.64
+kubectl run tmp-check --rm -i --restart=Never --image=busybox:1.36 -- \
+  wget -qO- http://fk-acr-demo-svc.default.svc.cluster.local
 ```
 
-Response:
+You can also verify that AKS can pull from ACR through the role assignment:
 
 ```bash
-Hello, here is FoggyKitchen.com deployed in AKS based on image taken from ACR (fkacr1.azurecr.io/hello:1.0)!
+az role assignment list \
+  --scope $(tofu output -raw acr_id) \
+  --query "[].{role:roleDefinitionName, principal:principalId}" \
+  -o table
 ```
 
 ---
 
-## 🔐 Network Security Group (NSG)
+## Azure Portal View
 
-For the LoadBalancer service to be accessible publicly, the subnet hosting AKS nodes must allow inbound traffic on:
-- Port **80/TCP** (frontend rule of the LB)
-- Ports **30000–32767/TCP** from `AzureLoadBalancer` (health probes)
-- Optionally, the **NodePort** assigned by Kubernetes (e.g. `32209/TCP`)
+Open the AKS cluster and ACR in the Azure Portal.
+You should see:
+- The AKS cluster using Kubenet networking.
+- The ACR created in the same resource group.
+- The AKS kubelet identity assigned `AcrPull` on the registry through the RBAC module.
+- The `fk-acr-demo-svc` LoadBalancer service exposing the application publicly.
 
-Example NSG configuration in Terraform:
-
-```hcl
-resource "azurerm_network_security_group" "agents" {
-  name                = "fk-aks-agents-nsg"
-  location            = azurerm_resource_group.foggykitchen_rg.location
-  resource_group_name = var.resource_group_name
-}
-
-resource "azurerm_subnet_network_security_group_association" "agents_assoc" {
-  subnet_id                 = module.aks.subnet_id
-  network_security_group_id = azurerm_network_security_group.agents.id
-}
-
-# Allow Load Balancer probes
-resource "azurerm_network_security_rule" "allow_lb_probes" {
-  name                        = "allow-azlb-probes-nodeport"
-  priority                    = 200
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  source_address_prefix       = "AzureLoadBalancer"
-  destination_port_ranges     = ["30000-32767"]
-  destination_address_prefix  = "*"
-  resource_group_name         = var.resource_group_name
-  network_security_group_name = azurerm_network_security_group.agents.name
-}
-
-# Allow HTTP (port 80)
-resource "azurerm_network_security_rule" "allow_http_80" {
-  name                        = "allow-http-80"
-  priority                    = 205
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  source_address_prefix       = "*"
-  destination_port_range      = "80"
-  destination_address_prefix  = "*"
-  resource_group_name         = var.resource_group_name
-  network_security_group_name = azurerm_network_security_group.agents.name
-}
-
-# Allow nodePort access (optional for direct testing)
-resource "azurerm_network_security_rule" "allow_http_nodeport" {
-  name                        = "allow-http-nodeport"
-  priority                    = 210
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  source_address_prefix       = "*"
-  destination_port_range      = "32209"
-  destination_address_prefix  = "*"
-  resource_group_name         = var.resource_group_name
-  network_security_group_name = azurerm_network_security_group.agents.name
-}
-```
+<img src="04-with-acr-attach-portal.png" width="900"/>
 
 ---
 
-## 🧭 Troubleshooting
+## Cleanup
 
-If `curl` to the EXTERNAL-IP times out:
-1. Ensure that the NSG is associated with the AKS subnet.
-2. Open port **80/TCP** for Internet traffic.
-3. Allow **AzureLoadBalancer** source for health probes.
-4. Confirm Load Balancer rule backend port = 80 and probe port = nodePort.
+To remove all resources created by this example:
 
-Test from within the cluster:
 ```bash
-kubectl run tmp --image=busybox --restart=Never -- sh -c 'wget -qO- http://fk-acr-demo-svc'
+tofu destroy
 ```
 
 ---
 
-## 🖼️ Azure Portal View
+## Summary
 
-<img src="04-with-acr-attach.png" width="900"/>
-
-You can verify in the **Azure Portal** that the AKS cluster is successfully connected to the **Azure Container Registry (ACR)**.  
-The overview page also confirms that:
-- The cluster is using the **kubenet** network configuration.  
-- The **container registry fkacr1** is attached to AKS.  
-- The cluster state is **Running** and the **LoadBalancer service** exposes your application publicly.
-
----
-
-## 🌐 Learn More
-
-Visit [FoggyKitchen.com](https://foggykitchen.com/) for hybrid cloud examples, architecture diagrams, and in-depth learning.
+This example demonstrates:
+- How to deploy AKS with OpenTofu.
+- How to create ACR with a separate reusable module.
+- How to grant AKS access to ACR with a separate RBAC module.
+- How to build an image with `az acr build`.
+- How to deploy and expose a workload from ACR on AKS.
 
 ---
 
-## 🪪 License
+## Learn More
+
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
+
+---
+
+## License
 
 Licensed under the Universal Permissive License (UPL), Version 1.0.  
 See [LICENSE](../../LICENSE) for more details.

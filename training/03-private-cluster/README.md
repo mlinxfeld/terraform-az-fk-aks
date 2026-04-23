@@ -1,38 +1,157 @@
-# Lesson 3 — Private AKS Cluster (Secure Private API + Bastion Access)
+# Lesson 03: Private AKS Cluster with Bastion Access
 
-In this example, we deploy an **Azure Kubernetes Service (AKS) private cluster** — a cluster whose API server is reachable **only inside the Virtual Network**.  
-We combine:
+In this example, we deploy a **private Azure Kubernetes Service (AKS)** cluster whose API server is reachable only from inside the Virtual Network.
+The cluster uses **Azure CNI**, `outbound_type = "userDefinedRouting"`, a NAT Gateway for outbound node traffic, and Azure Bastion tunneling through a private jump VM.
 
-- a private AKS control plane,
-- Azure Bastion (Standard) with tunneling,
-- a small jump VM in the private subnet,
-- NAT Gateway for outbound connectivity (`userDefinedRouting` mode).
+`userDefinedRouting` is set intentionally. It tells AKS not to manage outbound traffic through its default Standard Load Balancer path. Instead, outbound connectivity is controlled by the subnet networking that we define in this example. AKS requires the node subnet to have a route table associated when `userDefinedRouting` is enabled, even if that route table has no custom routes. The empty UDR is therefore deliberate: it satisfies the AKS requirement, while NAT Gateway provides the actual outbound internet path for private nodes.
 
-This setup ensures that **no public endpoint is exposed**, and all Kubernetes management happens strictly within the trusted network boundary.
+The supporting network, route table, NAT Gateway, Public IP, Bastion host, jump VM, and NSG are created with reusable FoggyKitchen modules.
 
-📘 Related blog post:
-[Azure Bastion with Terraform — Secure Access to Private AKS Clusters (Hands-On)](https://foggykitchen.com/2025/11/11/azure-bastion-terraform/)
+Related blog post:
+[Azure Bastion with Terraform - Secure Access to Private AKS Clusters (Hands-On)](https://foggykitchen.com/2025/11/11/azure-bastion-terraform/)
 
 ---
 
-## 📁 Training Folder Structure
+## Architecture Overview
 
+<img src="03-private-cluster-architecture.png" width="900"/>
+
+This deployment creates:
+- A new **Resource Group**.
+- A dedicated **Azure Virtual Network** using `terraform-az-fk-vnet`.
+- A private AKS subnet and an `AzureBastionSubnet`.
+- A route table associated with the private AKS subnet using `terraform-az-fk-routing`.
+- A NAT Gateway associated with the private AKS subnet using `terraform-az-fk-natgw`.
+- A dedicated NAT Gateway public IP using `terraform-az-fk-public-ip`.
+- An **Azure Bastion** host using `terraform-az-fk-bastion`.
+- A private jump VM using `terraform-az-fk-compute`.
+- A NIC-level NSG using `terraform-az-fk-nsg` that allows SSH only from the Bastion subnet.
+- A private **AKS cluster** using `terraform-az-fk-aks`.
+
+The important parts of this architecture are:
+- The AKS API server is private and reachable only through the VNet.
+- The jump VM has no public IP address.
+- Azure Bastion provides the operator path into the VNet.
+- NAT Gateway gives the private subnet outbound internet access.
+
+---
+
+## Module Composition
+
+The VNet module creates both subnets used by AKS and Bastion:
+
+```hcl
+module "vnet" {
+  source = "github.com/mlinxfeld/terraform-az-fk-vnet"
+
+  name                = "foggykitchen-vnet"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  address_space = ["10.0.0.0/16"]
+
+  subnets = {
+    foggykitchen-private-subnet = {
+      address_prefixes = ["10.0.1.0/24"]
+    }
+    AzureBastionSubnet = {
+      address_prefixes = ["10.0.2.0/26"]
+    }
+  }
+}
 ```
-03-private-cluster/
-├── main.tf
-├── network.tf
-├── bastion.tf
-├── security.tf
-├── variables.tf
-├── outputs.tf
-└── README.md   ← (this file)
+
+The AKS module consumes the existing VNet and subnet outputs:
+
+```hcl
+module "aks" {
+  source              = "../.."
+  name                = "fk-aks-private"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  network_plugin = "azure"
+  outbound_type  = "userDefinedRouting"
+  vnet_id        = module.vnet.vnet_id
+  subnet_id      = module.vnet.subnet_ids["foggykitchen-private-subnet"]
+
+  default_node_count      = 2
+  default_node_vm_size    = "Standard_D2s_v3"
+  private_cluster_enabled = true
+}
+```
+
+The route table and NAT Gateway are also composed through FoggyKitchen modules:
+
+```hcl
+module "routing" {
+  source = "github.com/mlinxfeld/terraform-az-fk-routing"
+
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  route_tables = {
+    foggykitchen-aks-udr = {
+      location = azurerm_resource_group.foggykitchen_rg.location
+      subnet_ids = [
+        module.vnet.subnet_ids["foggykitchen-private-subnet"]
+      ]
+    }
+  }
+}
+
+module "natgw_public_ip" {
+  source = "github.com/mlinxfeld/terraform-az-fk-public-ip"
+
+  name                = "foggykitchen-natgw-ip"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+}
+
+module "natgw" {
+  source = "github.com/mlinxfeld/terraform-az-fk-natgw"
+
+  name                = "foggykitchen-natgw"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  create_public_ip = false
+  public_ip_id     = module.natgw_public_ip.id
+
+  subnet_associations = {
+    private_subnet = {
+      subnet_id = module.vnet.subnet_ids["foggykitchen-private-subnet"]
+    }
+  }
+}
+```
+
+The jump VM is private and has an NSG attached at NIC level:
+
+```hcl
+module "jump_vm" {
+  source = "github.com/mlinxfeld/terraform-az-fk-compute"
+
+  name                = "foggykitchen-jump-vm"
+  location            = azurerm_resource_group.foggykitchen_rg.location
+  resource_group_name = azurerm_resource_group.foggykitchen_rg.name
+
+  deployment_mode = "vm"
+  subnet_id       = module.vnet.subnet_ids["foggykitchen-private-subnet"]
+
+  admin_username = "azureuser"
+  ssh_public_key = tls_private_key.public_private_key_pair.public_key_openssh
+  vm_size        = "Standard_B1s"
+
+  attach_nsg_to_nic = true
+  nsg_id            = module.jump_vm_nsg.id
+}
 ```
 
 ---
 
-## 🚀 Deployment
+## Deployment Steps
 
-Initialize and apply:
+Initialize and apply the OpenTofu configuration:
 
 ```bash
 tofu init
@@ -40,82 +159,67 @@ tofu plan
 tofu apply
 ```
 
-A successful deployment looks like this:
-
-```
-azurerm_bastion_host.foggykitchen_bastion: Creation complete after 8m6s [id=/subscriptions/.../resourceGroups/fk-aks-demo-rg/providers/Microsoft.Network/bastionHosts/foggykitchen_bastion]
-
-Apply complete! Resources: 18 added, 0 changed, 0 destroyed.
-
-Outputs:
-
-jump_private_key_openssh = <sensitive>
-
-jump_public_key_openssh = ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ...
-```
-
-> Tip: AKS private clusters need a **route table association** on the node pool subnet when `outbound_type = "userDefinedRouting"`. A blank UDR is sufficient — AKS only validates its presence.
-
----
-
-## 🔐 Retrieving SSH Key From Terraform Outputs
-
-Extract the private SSH key generated by Terraform:
+Retrieve the private SSH key generated by OpenTofu:
 
 ```bash
 tofu output -raw jump_private_key_openssh > ~/.ssh/fk_jumpvm
 chmod 600 ~/.ssh/fk_jumpvm
 ```
 
----
-
-## 🛰 Connect to the Jump VM via Azure Bastion Tunneling
-
-Open the tunnel (leave running):
+Open a Bastion tunnel to the private jump VM:
 
 ```bash
-az network bastion tunnel   --name foggykitchen_bastion   --resource-group fk-aks-demo-rg   --target-resource-id $(az vm show     -g fk-aks-demo-rg     -n foggykitchen_jump_vm     --query id -o tsv)   --resource-port 22   --port 50022
+az network bastion tunnel \
+  --name foggykitchen-bastion \
+  --resource-group fk-aks-demo-rg \
+  --target-resource-id $(az vm show \
+    --resource-group fk-aks-demo-rg \
+    --name foggykitchen-jump-vm \
+    --query id -o tsv) \
+  --resource-port 22 \
+  --port 50022
 ```
 
-In a second terminal:
+In a second terminal, connect through the local tunnel:
 
 ```bash
 ssh -i ~/.ssh/fk_jumpvm -p 50022 azureuser@127.0.0.1
 ```
 
-You should land in:
-
-```
-Welcome to Ubuntu 20.04.6 LTS
-IPv4 address for eth0: 10.0.1.4
-```
-
 ---
 
-## 🛠 Installing Azure CLI & `kubectl` on the Jump Host
+## Private AKS Access
 
-```bash
-# Azure CLI
-curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-
-# kubectl (stable)
-curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -m 0755 kubectl /usr/local/bin/kubectl
-```
-
-Log in from the jump VM:
+You can retrieve AKS credentials directly from the jump VM after logging in with Azure CLI:
 
 ```bash
 az login
-az account set --subscription <SUB_ID>
+az aks get-credentials \
+  --resource-group fk-aks-demo-rg \
+  --name fk-aks-private \
+  --admin \
+  --overwrite-existing
 ```
 
----
-
-## 🔗 Retrieve Private AKS Credentials
+For non-interactive training runs, you can also retrieve the admin kubeconfig locally and copy it to the jump VM through the Bastion tunnel:
 
 ```bash
-az aks get-credentials   -g fk-aks-demo-rg   -n fk-aks-private   --admin   --overwrite-existing
+az aks get-credentials \
+  --resource-group fk-aks-demo-rg \
+  --name fk-aks-private \
+  --admin \
+  --file /tmp/fk-aks-private-kubeconfig \
+  --overwrite-existing
+
+ssh -i ~/.ssh/fk_jumpvm -p 50022 azureuser@127.0.0.1 \
+  'mkdir -p ~/.kube && chmod 700 ~/.kube'
+
+scp -i ~/.ssh/fk_jumpvm -P 50022 \
+  /tmp/fk-aks-private-kubeconfig \
+  azureuser@127.0.0.1:/home/azureuser/.kube/config
+
+ssh -i ~/.ssh/fk_jumpvm -p 50022 azureuser@127.0.0.1 \
+  'chmod 600 ~/.kube/config'
 ```
 
 Verify cluster access:
@@ -123,79 +227,83 @@ Verify cluster access:
 ```bash
 kubectl cluster-info
 kubectl get nodes -o wide
+kubectl get pods -A -o wide
 ```
 
-Expected output:
-
-```
-Kubernetes control plane is running at https://fk-aks-private-....privatelink.westeurope.azmk8s.io:443
-
-NAME                             STATUS   ROLES    AGE   VERSION
-aks-system-30550442-vmss000000   Ready    <none>   10m   v1.31.10
-aks-system-30550442-vmss000001   Ready    <none>   10m   v1.31.10
-```
+The private AKS API endpoint should resolve inside the VNet, and nodes should use IPs from the `10.0.1.0/24` subnet.
 
 ---
 
-## 🧪 Smoke Test
+## Smoke Test
+
+Create a small workload:
 
 ```bash
-kubectl create ns smoke
-kubectl -n smoke create deployment whoami --image=containous/whoami --replicas=1
+kubectl create ns smoke --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n smoke create deployment whoami \
+  --image=traefik/whoami \
+  --replicas=1 \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n smoke rollout status deployment/whoami --timeout=120s
 kubectl -n smoke get pods -o wide
 ```
 
-Verify NAT Gateway egress:
+Verify outbound traffic through the private subnet NAT path:
 
 ```bash
 curl -s ifconfig.me
 ```
 
-You should see the public IP assigned to your NAT Gateway.
-
----
-
-## ⚠️ Troubleshooting
-
-### Issue: `ExistingRouteTableNotAssociatedWithSubnet`
-**Reason:** AKS private cluster with `outbound_type=userDefinedRouting` requires a UDR on the node pool subnet.
-
-✅ Solution: create a blank route table and associate it. No routes required.
-
----
-
-### Issue: SSH `Permission denied (publickey)`
-- Use the key generated by Terraform (`jump_private_key_openssh`).
-- Confirm file permissions: `chmod 600`.
-
----
-
-### Issue: Bastion tunnel says `Defined port is currently unavailable`
-Try another local port, e.g.:
+The returned IP should match the NAT Gateway public IP from OpenTofu output:
 
 ```bash
---port 40022
+tofu output natgw_public_ip
 ```
 
-## ✅ Summary
+In a verified run, the jump VM private IP was `10.0.1.4`, AKS node IPs came from `10.0.1.0/24`, and NAT egress returned the NAT Gateway public IP.
+
+---
+
+## Azure Portal View
+
+After deployment, open the AKS cluster and supporting networking resources in the Azure Portal.
+You should see:
+- The AKS cluster configured as a private cluster.
+- The node subnet associated with the route table and NAT Gateway.
+- The private jump VM reachable through Azure Bastion.
+- The Bastion and NAT Gateway public IP resources created by their modules.
+
+<img src="03-private-cluster-portal.png" width="900"/>
+
+---
+
+## Cleanup
+
+To remove all resources created by this example:
+
+```bash
+tofu destroy
+```
+
+---
+
+## Summary
 
 This example demonstrates:
-
-- How to deploy an **AKS private cluster** using Terraform.
-- How to access the private API server securely using **Azure Bastion tunneling**.
-- How to run `kubectl` exclusively from within the Virtual Network.
-
-This setup mirrors the architecture of a **private OKE cluster** on OCI, adapted to Azure’s AKS model.
+- How to deploy a **private AKS cluster** using OpenTofu.
+- How to compose the **FoggyKitchen VNet**, **Routing**, **NAT Gateway**, **Public IP**, **Bastion**, **Compute**, **NSG**, and **AKS** modules.
+- How to access a private AKS API server through Azure Bastion and a private jump VM.
+- Why `userDefinedRouting` requires a route table association on the AKS subnet.
 
 ---
 
-## 🌐 Learn More
+## Learn More
 
-Visit **[FoggyKitchen.com](https://foggykitchen.com/)** for multicloud Terraform examples, workshops, and in-depth training.
+Visit [FoggyKitchen.com](https://foggykitchen.com/) for Azure, multicloud, and Terraform/OpenTofu learning resources.
 
 ---
 
-## 🪪 License
+## License
 
 Licensed under the **Universal Permissive License (UPL), Version 1.0**.  
-See [LICENSE](../../LICENSE) for details.
+See [LICENSE](../../LICENSE) for more details.
