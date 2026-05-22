@@ -37,7 +37,7 @@ The ACR module creates the external registry:
 
 ```hcl
 module "acr" {
-  source = "github.com/mlinxfeld/terraform-az-fk-acr"
+  source = "github.com/foggykitchen/terraform-az-fk-acr"
 
   acr_name            = var.acr_name
   location            = azurerm_resource_group.foggykitchen_rg.location
@@ -70,7 +70,7 @@ The RBAC module grants the AKS kubelet identity permission to pull images from A
 
 ```hcl
 module "acr_pull" {
-  source = "github.com/mlinxfeld/terraform-az-fk-rbac"
+  source = "github.com/foggykitchen/terraform-az-fk-rbac"
 
   scope                = module.acr.acr_id
   principal_id         = module.aks.kubelet_object_id

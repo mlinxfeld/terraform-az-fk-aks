@@ -1,5 +1,5 @@
 module "vnet" {
-  source = "github.com/mlinxfeld/terraform-az-fk-vnet"
+  source = "github.com/foggykitchen/terraform-az-fk-vnet"
 
   name                = "foggykitchen-vnet"
   location            = azurerm_resource_group.foggykitchen_rg.location
@@ -18,7 +18,7 @@ module "vnet" {
 }
 
 module "routing" {
-  source = "github.com/mlinxfeld/terraform-az-fk-routing"
+  source = "github.com/foggykitchen/terraform-az-fk-routing"
 
   resource_group_name = azurerm_resource_group.foggykitchen_rg.name
 
@@ -33,7 +33,7 @@ module "routing" {
 }
 
 module "natgw_public_ip" {
-  source = "github.com/mlinxfeld/terraform-az-fk-public-ip"
+  source = "github.com/foggykitchen/terraform-az-fk-public-ip"
 
   name                = "foggykitchen-natgw-ip"
   location            = azurerm_resource_group.foggykitchen_rg.location
@@ -41,7 +41,7 @@ module "natgw_public_ip" {
 }
 
 module "natgw" {
-  source = "github.com/mlinxfeld/terraform-az-fk-natgw"
+  source = "github.com/foggykitchen/terraform-az-fk-natgw"
 
   name                = "foggykitchen-natgw"
   location            = azurerm_resource_group.foggykitchen_rg.location

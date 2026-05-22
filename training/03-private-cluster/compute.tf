@@ -1,5 +1,5 @@
 module "jump_vm" {
-  source = "github.com/mlinxfeld/terraform-az-fk-compute"
+  source = "github.com/foggykitchen/terraform-az-fk-compute"
 
   name                = "foggykitchen-jump-vm"
   location            = azurerm_resource_group.foggykitchen_rg.location

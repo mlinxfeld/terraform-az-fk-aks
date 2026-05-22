@@ -38,7 +38,7 @@ The VNet is created by the FoggyKitchen VNet module:
 
 ```hcl
 module "vnet" {
-  source = "github.com/mlinxfeld/terraform-az-fk-vnet"
+  source = "github.com/foggykitchen/terraform-az-fk-vnet"
 
   name                = "foggykitchen-vnet"
   location            = azurerm_resource_group.foggykitchen_rg.location

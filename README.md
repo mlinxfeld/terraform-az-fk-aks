@@ -83,7 +83,7 @@ Lessons `01-08` make up the current course core. Lessons `09+` are treated as ex
 
 ```hcl
 module "aks" {
-  source = "git::https://github.com/mlinxfeld/terraform-az-fk-aks.git?ref=v0.1.0"
+  source = "git::https://github.com/foggykitchen/terraform-az-fk-aks.git?ref=v0.1.0"
 
   name                = "fk-aks-demo"
   location            = "westeurope"
@@ -129,7 +129,7 @@ module "aks" {
 
   tags = {
     project = "foggykitchen-aks"
-    owner   = "mlinxfeld"
+    owner   = "foggykitchen"
   }
 }
 ```
@@ -206,14 +206,14 @@ module "aks" {
 ## Related Resources
 
 - [Training examples](training)
-- [FoggyKitchen Azure Compute Module](https://github.com/mlinxfeld/terraform-az-fk-compute)
-- [FoggyKitchen Azure VNet Module](https://github.com/mlinxfeld/terraform-az-fk-vnet)
-- [FoggyKitchen Azure ACR Module](https://github.com/mlinxfeld/terraform-az-fk-acr)
-- [FoggyKitchen Azure RBAC Module](https://github.com/mlinxfeld/terraform-az-fk-rbac)
-- [FoggyKitchen Azure Bastion Module](https://github.com/mlinxfeld/terraform-az-fk-bastion)
-- [FoggyKitchen Azure NAT Gateway Module](https://github.com/mlinxfeld/terraform-az-fk-natgw)
-- [FoggyKitchen Azure Routing Module](https://github.com/mlinxfeld/terraform-az-fk-routing)
-- [FoggyKitchen Azure Public IP Module](https://github.com/mlinxfeld/terraform-az-fk-public-ip)
+- [FoggyKitchen Azure Compute Module](https://github.com/foggykitchen/terraform-az-fk-compute)
+- [FoggyKitchen Azure VNet Module](https://github.com/foggykitchen/terraform-az-fk-vnet)
+- [FoggyKitchen Azure ACR Module](https://github.com/foggykitchen/terraform-az-fk-acr)
+- [FoggyKitchen Azure RBAC Module](https://github.com/foggykitchen/terraform-az-fk-rbac)
+- [FoggyKitchen Azure Bastion Module](https://github.com/foggykitchen/terraform-az-fk-bastion)
+- [FoggyKitchen Azure NAT Gateway Module](https://github.com/foggykitchen/terraform-az-fk-natgw)
+- [FoggyKitchen Azure Routing Module](https://github.com/foggykitchen/terraform-az-fk-routing)
+- [FoggyKitchen Azure Public IP Module](https://github.com/foggykitchen/terraform-az-fk-public-ip)
 
 ---
 

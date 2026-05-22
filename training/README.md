@@ -76,15 +76,15 @@ The training examples intentionally avoid:
 ## Related Resources
 
 - [FoggyKitchen AKS Module](../)
-- [FoggyKitchen Azure Compute Module](https://github.com/mlinxfeld/terraform-az-fk-compute)
-- [FoggyKitchen Azure VNet Module](https://github.com/mlinxfeld/terraform-az-fk-vnet)
-- [FoggyKitchen Azure ACR Module](https://github.com/mlinxfeld/terraform-az-fk-acr)
-- [FoggyKitchen Azure RBAC Module](https://github.com/mlinxfeld/terraform-az-fk-rbac)
-- [FoggyKitchen Azure Bastion Module](https://github.com/mlinxfeld/terraform-az-fk-bastion)
-- [FoggyKitchen Azure NAT Gateway Module](https://github.com/mlinxfeld/terraform-az-fk-natgw)
-- [FoggyKitchen Azure Routing Module](https://github.com/mlinxfeld/terraform-az-fk-routing)
-- [FoggyKitchen Azure Public IP Module](https://github.com/mlinxfeld/terraform-az-fk-public-ip)
-- [OCI OKE Module](https://github.com/mlinxfeld/terraform-oci-fk-oke)
+- [FoggyKitchen Azure Compute Module](https://github.com/foggykitchen/terraform-az-fk-compute)
+- [FoggyKitchen Azure VNet Module](https://github.com/foggykitchen/terraform-az-fk-vnet)
+- [FoggyKitchen Azure ACR Module](https://github.com/foggykitchen/terraform-az-fk-acr)
+- [FoggyKitchen Azure RBAC Module](https://github.com/foggykitchen/terraform-az-fk-rbac)
+- [FoggyKitchen Azure Bastion Module](https://github.com/foggykitchen/terraform-az-fk-bastion)
+- [FoggyKitchen Azure NAT Gateway Module](https://github.com/foggykitchen/terraform-az-fk-natgw)
+- [FoggyKitchen Azure Routing Module](https://github.com/foggykitchen/terraform-az-fk-routing)
+- [FoggyKitchen Azure Public IP Module](https://github.com/foggykitchen/terraform-az-fk-public-ip)
+- [OCI OKE Module](https://github.com/foggykitchen/terraform-oci-fk-oke)
 
 ---
 
