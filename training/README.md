@@ -82,7 +82,7 @@ The training examples intentionally avoid:
 - [FoggyKitchen Azure RBAC Module](https://github.com/foggykitchen/terraform-az-fk-rbac)
 - [FoggyKitchen Azure Bastion Module](https://github.com/mlinxfeld/terraform-az-fk-bastion)
 - [FoggyKitchen Azure NAT Gateway Module](https://github.com/foggykitchen/terraform-az-fk-natgw)
-- [FoggyKitchen Azure Routing Module](https://github.com/mlinxfeld/terraform-az-fk-routing)
+- [FoggyKitchen Azure Routing Module](https://github.com/foggykitchen/terraform-az-fk-routing)
 - [FoggyKitchen Azure Public IP Module](https://github.com/foggykitchen/terraform-az-fk-public-ip)
 - [OCI OKE Module](https://github.com/foggykitchen/terraform-oci-fk-oke)
 
