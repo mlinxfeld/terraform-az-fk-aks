@@ -79,7 +79,7 @@ The training examples intentionally avoid:
 - [FoggyKitchen Azure Compute Module](https://github.com/mlinxfeld/terraform-az-fk-compute)
 - [FoggyKitchen Azure VNet Module](https://github.com/foggykitchen/terraform-az-fk-vnet)
 - [FoggyKitchen Azure ACR Module](https://github.com/mlinxfeld/terraform-az-fk-acr)
-- [FoggyKitchen Azure RBAC Module](https://github.com/mlinxfeld/terraform-az-fk-rbac)
+- [FoggyKitchen Azure RBAC Module](https://github.com/foggykitchen/terraform-az-fk-rbac)
 - [FoggyKitchen Azure Bastion Module](https://github.com/mlinxfeld/terraform-az-fk-bastion)
 - [FoggyKitchen Azure NAT Gateway Module](https://github.com/foggykitchen/terraform-az-fk-natgw)
 - [FoggyKitchen Azure Routing Module](https://github.com/mlinxfeld/terraform-az-fk-routing)
