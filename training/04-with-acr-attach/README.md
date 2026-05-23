@@ -35,7 +35,7 @@ The ACR module creates the external registry:
 
 ```hcl
 module "acr" {
-  source = "github.com/mlinxfeld/terraform-az-fk-acr"
+  source = "github.com/foggykitchen/terraform-az-fk-acr"
 
   acr_name            = var.acr_name
   location            = azurerm_resource_group.foggykitchen_rg.location
